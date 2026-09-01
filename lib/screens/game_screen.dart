@@ -105,12 +105,16 @@ class _GameScreenState extends State<GameScreen> {
                   Expanded(
                     child: Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(8),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            final boardExtent = constraints.maxWidth < constraints.maxHeight * 0.62
+                            // Fill nearly all of the space Expanded actually
+                            // gives this area (only a small margin, not an
+                            // arbitrary shrink) so the board doesn't float
+                            // in a sea of empty space on tall phone screens.
+                            final boardExtent = constraints.maxWidth < constraints.maxHeight * 0.96
                                 ? constraints.maxWidth
-                                : constraints.maxHeight * 0.62;
+                                : constraints.maxHeight * 0.96;
                             _reportBoardCellSize(boardExtent / GameEngine.boardSize);
                             return SizedBox(
                               width: boardExtent,
