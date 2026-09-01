@@ -11,7 +11,7 @@ import '../services/score_service.dart';
 /// Flutter widget dependencies, so it can be unit-tested independently of
 /// the drag-and-drop UI.
 class GameEngine extends ChangeNotifier {
-  static const int boardSize = 8;
+  static const int boardSize = 12;
   static const int trayCount = 3;
 
   List<List<Color?>> board = List.generate(boardSize, (_) => List<Color?>.filled(boardSize, null));

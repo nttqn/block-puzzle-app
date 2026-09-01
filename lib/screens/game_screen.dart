@@ -123,7 +123,12 @@ class _GameScreenState extends State<GameScreen> {
                     ),
                 ],
               ),
-              if (_engine.paused && !_engine.gameOver) _PauseOverlay(onResume: _engine.togglePause),
+              if (_engine.paused && !_engine.gameOver)
+                _PauseOverlay(
+                  onResume: _engine.togglePause,
+                  onRestart: _restart,
+                  onExit: () => Navigator.of(context).pop(),
+                ),
               if (_engine.gameOver)
                 _GameOverOverlay(
                   score: _engine.score,
@@ -162,8 +167,10 @@ class _ScoreTile extends StatelessWidget {
 
 class _PauseOverlay extends StatelessWidget {
   final VoidCallback onResume;
+  final VoidCallback onRestart;
+  final VoidCallback onExit;
 
-  const _PauseOverlay({required this.onResume});
+  const _PauseOverlay({required this.onResume, required this.onRestart, required this.onExit});
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +186,15 @@ class _PauseOverlay extends StatelessWidget {
               onPressed: onResume,
               icon: const Icon(Icons.play_arrow),
               label: const Text('Resume'),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(onPressed: onExit, child: const Text('Menu')),
+                const SizedBox(width: 16),
+                OutlinedButton(onPressed: onRestart, child: const Text('Restart')),
+              ],
             ),
           ],
         ),
