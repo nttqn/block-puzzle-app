@@ -1,7 +1,7 @@
-# Block Puzzle
+# Block Puzzle Plus
 
 A Flutter Android block-puzzle game: drag wooden blocks from a 3-piece tray
-onto an 8x8 grid, clear full rows/columns for points, chain clears for combo
+onto a grid, clear full rows/columns for points, chain clears for combo
 bonuses. Genre clone of the classic "block blast" style puzzle games — own
 art, own code, no assets or code copied from any existing app.
 

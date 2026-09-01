@@ -1,5 +1,5 @@
 name: block_puzzle
-description: "Block Puzzle - drag wooden blocks onto an 8x8 grid, clear rows and columns for points."
+description: "Block Puzzle Plus - drag wooden blocks onto a grid, clear rows and columns for points."
 publish_to: 'none'
 version: 1.0.0+1
 

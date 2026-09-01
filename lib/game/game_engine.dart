@@ -52,6 +52,14 @@ class GameEngine extends ChangeNotifier {
   ScorePopup? popup;
   int popupSeq = 0;
 
+  /// The most recent line-clear explosion (which cells burst, and their
+  /// color at the moment they cleared), paired with a sequence number the
+  /// same way [popup]/[popupSeq] are — so the UI can tell "a new clear
+  /// just happened" apart from re-reading a stale value on an unrelated
+  /// rebuild.
+  ExplosionEvent? explosion;
+  int explosionSeq = 0;
+
   Future<void> start({GameMode mode = GameMode.classic}) async {
     this.mode = mode;
     best = await ScoreService.instance.loadBest(mode);
@@ -179,6 +187,14 @@ class GameEngine extends ChangeNotifier {
         bomb = null;
       }
 
+      // Capture each cell's color before it's nulled below, for the
+      // explosion particle effect — the board itself no longer has this
+      // information once the clear actually happens.
+      explosion = ExplosionEvent(
+        flashed.map((p) => ExplosionCell(row: p.x, col: p.y, color: board[p.x][p.y] ?? kBombColor)).toList(),
+      );
+      explosionSeq++;
+
       clearingCells = flashed;
       notifyListeners();
       HapticFeedback.mediumImpact();
@@ -280,6 +296,22 @@ class ScorePopup {
   final double row;
   final double col;
   const ScorePopup({required this.points, required this.row, required this.col});
+}
+
+/// A single line-clear event: every cell that burst, and the color it was
+/// showing at the moment it cleared (the board cell itself is nulled right
+/// after this is captured, so this is the only record of what color
+/// belongs at each exploding position).
+class ExplosionEvent {
+  final List<ExplosionCell> cells;
+  const ExplosionEvent(this.cells);
+}
+
+class ExplosionCell {
+  final int row;
+  final int col;
+  final Color color;
+  const ExplosionCell({required this.row, required this.col, required this.color});
 }
 
 /// A survival-mode bomb sitting on the board at (row, col), counting down.

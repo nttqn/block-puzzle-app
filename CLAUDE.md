@@ -4,9 +4,18 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What this is
 
-A Flutter Android block-puzzle game (`Block Puzzle`), English UI, with AdMob
+A Flutter Android block-puzzle game (`Block Puzzle Plus`), English UI, with AdMob
 banner + interstitial ads wired in, intended for Google Play. No leaderboard
 / Play Games Services (deliberately skipped — this genre doesn't need one).
+The Dart package name (`block_puzzle`, i.e. every `package:block_puzzle/...`
+import) and the Android application ID (`com.trungsmail.block_puzzle`) were
+deliberately **not** renamed to match — those are internal identifiers, not
+the user-visible name, and changing either is a much bigger/riskier
+operation (every import statement; the Play Store listing identity, if this
+were ever published under the old ID) than the display-name change this
+was actually asked for. The display name (`MaterialApp.title`, the Android
+`android:label` set by CI, and the home screen's title art) is
+"Block Puzzle Plus".
 There is no native `android/` (or `ios/`/`web/`) directory committed — see
 "Android project is generated, not committed" below.
 
@@ -307,6 +316,24 @@ of whether an earlier one is still animating) — `_activePopups` is a list,
 not a single slot, precisely so back-to-back placements each show their
 own number rather than one clobbering another. Best score persists via `shared_preferences`
 (`lib/services/score_service.dart`).
+
+**Line-clear explosion** (`GameEngine.explosion`/`explosionSeq`, an
+`ExplosionEvent` of `ExplosionCell{row,col,color}`; rendered by
+`BoardWidget._buildExplosion`): exact same `popupSeq`-style "new event"
+detection as the score popup (a monotonic counter `BoardWidget` diffs in
+`didUpdateWidget`, since the same mutable `GameEngine` instance is reused
+across rebuilds). Captured in `placePiece` at the same point `flashed` is
+computed — **before** those cells get nulled a few lines later — since the
+board itself has no record of a cell's color once it's cleared. Each
+cleared cell spawns 6 small colored squares (its own color) flying outward
+at evenly-spaced angles over 500ms, shrinking and fading via
+`Curves.easeOut`/`easeIn` — runs on its own `AnimationController`
+independent of (and longer than) the 160ms bright-flash-then-clear
+`clearingCells` treatment already on `BlockCell`, so the shards keep
+flying after the cell underneath has already gone empty. Like
+`_activePopups`, `_activeExplosions` is a list so overlapping clears (rare
+but possible with rapid placements) each get their own burst rather than
+one replacing another.
 
 **Survival mode / bomb tile** (`GameEngine.bomb`, a `BombTile { row, col,
 secondsLeft }`, plus `kBombColor` in `game_engine.dart`): a bomb is a board

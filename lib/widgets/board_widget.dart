@@ -1,3 +1,5 @@
+import 'dart:math' show cos, pi, sin;
+
 import 'package:flutter/material.dart';
 
 import '../game/game_engine.dart';
@@ -30,10 +32,14 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
   int _lastPopupSeq = 0;
   final List<_ActivePopup> _activePopups = [];
 
+  int _lastExplosionSeq = 0;
+  final List<_ActiveExplosion> _activeExplosions = [];
+
   @override
   void initState() {
     super.initState();
     _lastPopupSeq = widget.engine.popupSeq;
+    _lastExplosionSeq = widget.engine.explosionSeq;
   }
 
   @override
@@ -43,6 +49,11 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
     if (widget.engine.popupSeq != _lastPopupSeq && popup != null) {
       _lastPopupSeq = widget.engine.popupSeq;
       _addPopup(popup);
+    }
+    final explosion = widget.engine.explosion;
+    if (widget.engine.explosionSeq != _lastExplosionSeq && explosion != null) {
+      _lastExplosionSeq = widget.engine.explosionSeq;
+      _addExplosion(explosion);
     }
   }
 
@@ -60,9 +71,26 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
     controller.forward();
   }
 
+  void _addExplosion(ExplosionEvent explosion) {
+    final controller = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
+    final entry = _ActiveExplosion(explosion: explosion, controller: controller);
+    controller.addListener(() => setState(() {}));
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() => _activeExplosions.remove(entry));
+        controller.dispose();
+      }
+    });
+    setState(() => _activeExplosions.add(entry));
+    controller.forward();
+  }
+
   @override
   void dispose() {
     for (final entry in _activePopups) {
+      entry.controller.dispose();
+    }
+    for (final entry in _activeExplosions) {
       entry.controller.dispose();
     }
     super.dispose();
@@ -156,6 +184,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                             ),
                           ),
                         ),
+                  for (final entry in _activeExplosions) ..._buildExplosion(entry, cellSize),
                   for (final entry in _activePopups) _buildPopup(entry, cellSize),
                 ],
               ),
@@ -199,6 +228,53 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
     );
   }
 
+  static const int _particlesPerCell = 6;
+
+  /// A cleared cell bursts into [_particlesPerCell] small shards flying
+  /// outward at evenly-spaced angles, shrinking and fading as they go — the
+  /// underlying cell itself already flashes bright white and vanishes via
+  /// `clearingCells`/`BlockCell(bright: true)` on its own faster timeline
+  /// (see `_buildCell`); this runs concurrently on a longer timeline so the
+  /// shards keep flying after the cell underneath has already gone empty.
+  List<Widget> _buildExplosion(_ActiveExplosion entry, double cellSize) {
+    final t = entry.controller.value;
+    final travel = cellSize * 1.5 * Curves.easeOut.transform(t);
+    final scale = 1 - t * 0.7;
+    final opacity = (1 - Curves.easeIn.transform(t)).clamp(0.0, 1.0);
+    final particleSize = cellSize * 0.32;
+
+    final widgets = <Widget>[];
+    for (final cell in entry.explosion.cells) {
+      final centerX = (cell.col + 0.5) * cellSize;
+      final centerY = (cell.row + 0.5) * cellSize;
+      for (var k = 0; k < _particlesPerCell; k++) {
+        final angle = (k / _particlesPerCell) * 2 * pi;
+        final dx = cos(angle) * travel;
+        final dy = sin(angle) * travel;
+        widgets.add(
+          Positioned(
+            left: centerX + dx - particleSize / 2,
+            top: centerY + dy - particleSize / 2,
+            width: particleSize,
+            height: particleSize,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: opacity,
+                child: Transform.scale(
+                  scale: scale,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: cell.color, borderRadius: BorderRadius.circular(3)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+
   bool _inBounds(int r, int c) => r >= 0 && c >= 0 && r < GameEngine.boardSize && c < GameEngine.boardSize;
 
   Widget _buildCell(int r, int c) {
@@ -233,4 +309,10 @@ class _ActivePopup {
   final ScorePopup popup;
   final AnimationController controller;
   const _ActivePopup({required this.popup, required this.controller});
+}
+
+class _ActiveExplosion {
+  final ExplosionEvent explosion;
+  final AnimationController controller;
+  const _ActiveExplosion({required this.explosion, required this.controller});
 }

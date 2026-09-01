@@ -4,9 +4,7 @@ import '../game/game_mode.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
-import '../widgets/piece_view.dart';
 import '../widgets/sound_toggle_button.dart';
-import '../models/piece.dart';
 import 'game_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -59,17 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _LogoPiece(),
-                const SizedBox(height: 16),
-                const Text(
-                  'BLOCK PUZZLE',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
-                  ),
-                ),
+                Image.asset('assets/icon/icon.png', width: 220),
                 const SizedBox(height: 40),
                 for (final mode in GameMode.values) ...[
                   _ModeButton(
@@ -171,21 +159,5 @@ class _ModeButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _LogoPiece extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final shape = kAllShapes.firstWhere(
-      (s) => s.width == 3 && s.height == 3 && s.cells.length == 5,
-    );
-    final piece = PieceInstance(
-      cells: shape.cells,
-      width: shape.width,
-      height: shape.height,
-      color: const Color(0xFF1E88E5),
-    );
-    return PieceView(piece: piece, cellSize: 28);
   }
 }

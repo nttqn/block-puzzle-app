@@ -22,7 +22,7 @@ class BlockPuzzleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Block Puzzle',
+      title: 'Block Puzzle Plus',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: const Color(0xFF1E88E5),

@@ -40,7 +40,7 @@ jobs:
           fi
           sed -i "s#<application#<uses-permission android:name=\"android.permission.INTERNET\"/>\n  <application#" "$MANIFEST"
           sed -i "s#</application>#    <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"${APP_ID}\"/>\n  </application>#" "$MANIFEST"
-          sed -i -E 's/android:label="[^"]*"/android:label="Block Puzzle"/g' "$MANIFEST"
+          sed -i -E 's/android:label="[^"]*"/android:label="Block Puzzle Plus"/g' "$MANIFEST"
           cat "$MANIFEST"
 
       # google_mobile_ads requires minSdk 24+ (and a recent compileSdk).

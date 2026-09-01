@@ -99,4 +99,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 900));
     expect(find.textContaining('+'), findsNothing);
   });
+
+  testWidgets('a line clear bursts into particles that fly out and then disappear', (tester) async {
+    final engine = GameEngine();
+    for (var c = 0; c < GameEngine.boardSize - 1; c++) {
+      engine.board[0][c] = kPieceColors.first;
+    }
+    engine.tray[0] = _singleCell();
+
+    await tester.pumpWidget(_harness(engine));
+    final particlesBefore = tester.widgetList(find.byType(Opacity)).length;
+
+    unawaited(engine.placePiece(0, 0, GameEngine.boardSize - 1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+
+    // GameEngine.boardSize cells cleared (the whole row), 6 particles each.
+    final expectedParticles = GameEngine.boardSize * 6;
+    final particlesDuring = tester.widgetList(find.byType(Opacity)).length - particlesBefore;
+    expect(particlesDuring, greaterThanOrEqualTo(expectedParticles));
+
+    // The particle animation (500ms) outlives the +N popup's own 900ms
+    // timeline at different rates, so just confirm it's fully done by 600ms.
+    await tester.pump(const Duration(milliseconds: 600));
+    final particlesAfter = tester.widgetList(find.byType(Opacity)).length - particlesBefore;
+    expect(particlesAfter, lessThan(expectedParticles));
+  });
 }
