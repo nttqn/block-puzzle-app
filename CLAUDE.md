@@ -186,15 +186,22 @@ real trial-and-error, worth understanding before touching either file:
   (`onAcceptWithDetails`) use this same conversion, so whatever the
   feedback visually overlaps is exactly what gets validated/placed — no
   separate hit-testing math to keep in sync.
-- Each tray piece drags via a plain `Draggable` with
-  `dragAnchorStrategy: pointerDragAnchorStrategy` (**not** the default
-  `childDragAnchorStrategy` — see the fourth bug below for why that default
-  was actually the problem). This anchors the feedback's own top-left
-  corner exactly at the pointer, regardless of where within the piece the
-  user grabbed it — the "piece grows on pickup" size jump (feedback renders
-  at board scale, bigger than the tray thumbnail) is still a deliberate
-  genre convention, just no longer combined with a grab-point-dependent
-  offset. The piece is lifted above the finger for
+- Each tray piece drags via a plain `Draggable` with a **custom
+  center-anchoring** `dragAnchorStrategy` — `(draggable, context, position)
+  => Offset(feedbackWidth / 2, feedbackHeight / 2)` — computed from the
+  piece's own known board-scale dimensions in `tray_widget.dart`. Neither
+  of the two built-in strategies worked out (see the fourth and fifth bugs
+  below): the default `childDragAnchorStrategy` reintroduces a grab-point-
+  dependent offset that broke tight-fit placements, and
+  `pointerDragAnchorStrategy` (anchoring the top-left corner) fixed that
+  but snapped the piece's corner to the finger regardless of grab point,
+  which read as broken/disorienting. Center-anchoring keeps the same
+  determinism (no grab-point dependency — the tight-fit fix holds) while
+  matching how people actually expect a dragged shape to behave: it moves
+  as a rigid body centered on the finger. The "piece grows on pickup" size
+  jump (feedback renders at board scale, bigger than the tray thumbnail) is
+  still a deliberate genre convention. The piece is lifted above the
+  finger for
   visibility using a `Transform.translate` *inside* the `feedback` widget
   itself — **not** `Draggable.feedbackOffset`. This distinction matters a
   lot: `feedbackOffset` shifts the actual tracked/reported position
@@ -289,6 +296,31 @@ real trial-and-error, worth understanding before touching either file:
   (engine unit tests) and provably deterministic (this bug) three separate
   times; the anchor/offset layer is where every real bug in this feature
   has actually lived.
+- **A fifth bug**: `pointerDragAnchorStrategy` fixed the fourth bug's
+  correctness problem but introduced a *feel* problem — a user reported
+  "I have to drag the block to a different position than the real one for
+  it to match." Root cause: anchoring the feedback's *top-left corner* to
+  the pointer means the piece snaps so its corner (not wherever you
+  grabbed it) sits at the finger the instant the drag starts — grab a
+  multi-cell piece anywhere but its own top-left and the whole shape jumps
+  up-left of your finger by construction, and that jump then compounds
+  with the paint-only lift on top of it, producing a confusing double
+  offset between where the piece visually sits and where your finger
+  actually is. Fixed by switching to a **custom center-anchoring**
+  strategy (see above) — still fully deterministic (no grab-point
+  dependency, so the fourth bug's fix holds; `bottom_row_drag_test.dart`
+  was updated to target the piece's *bounding-box center*, not its
+  top-left corner, and still passes) but the piece now moves as a rigid
+  body centered on the finger, matching how a dragged shape is expected to
+  behave regardless of where on it you happened to grab. Also reduced the
+  paint-only lift from `1.5` to `0.6` cell heights while at it — with the
+  piece already centered on the finger, a smaller lift is enough to clear
+  a fingertip without visually separating the piece from the touch point
+  as much. **If a future report describes the piece's drawn position not
+  matching where it actually lands, check whether anything reintroduced a
+  corner-based or grab-point-dependent anchor** — center-anchoring is the
+  one that has actually held up across a correctness bug (the fourth) and
+  a real usability complaint (this one).
 - Verified end-to-end via a local Playwright-driven
   `flutter build web --release` + static-server session (drag from tray →
   live preview tint → drop → placement → score update; pause/resume

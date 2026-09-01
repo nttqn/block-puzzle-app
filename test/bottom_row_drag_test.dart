@@ -63,8 +63,9 @@ void main() {
       ),
     );
 
-    // Grab the piece at its ordinary center — with pointerDragAnchorStrategy
-    // this should no longer matter for where the piece actually lands.
+    // Grab the piece at its ordinary center — the drag anchor is center-
+    // based now (see tray_widget.dart), so this shouldn't matter for where
+    // the piece actually lands.
     final trayFinder = find.byType(Draggable<TrayDragData>).first;
     final trayCenter = tester.getCenter(trayFinder);
     final gesture = await tester.startGesture(trayCenter);
@@ -72,11 +73,15 @@ void main() {
 
     final boardFinder = find.byType(BoardWidget);
     final boardTopLeft = tester.getTopLeft(boardFinder);
-    // Aim for the exact top-left corner of the intended origin cell (the
-    // tightest possible margin) since the anchor is now pointer-fixed —
-    // this should land exactly on (lastRow, gapStart) regardless of grab
-    // point.
-    final targetLocal = Offset(gapStart * cellSize + 3, lastRow * cellSize + 3);
+    // The feedback is centered on the pointer, so the pointer needs to sit
+    // over the *center* of the intended bounding box (gapStart..gapStart+5,
+    // lastRow..lastRow+1) for the feedback's top-left (and thus the
+    // computed origin) to land exactly on (lastRow, gapStart). +2px biases
+    // just inside the target cell rather than exactly on its boundary.
+    final targetLocal = Offset(
+      (gapStart + fiveLineShape.width / 2) * cellSize + 2,
+      (lastRow + fiveLineShape.height / 2) * cellSize + 2,
+    );
     await gesture.moveTo(boardTopLeft + targetLocal);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump();
