@@ -321,12 +321,61 @@ real trial-and-error, worth understanding before touching either file:
   corner-based or grab-point-dependent anchor** — center-anchoring is the
   one that has actually held up across a correctness bug (the fourth) and
   a real usability complaint (this one).
+- **A sixth bug, a real crash this time (not just a UX complaint)**: shipping
+  the center-anchor fix (fifth bug) immediately surfaced a live `RenderFlex
+  overflowed by 44 pixels on the right` in `TrayWidget`'s `Row`
+  (`tray_widget.dart:35`), caught from the actual Chrome console during
+  manual testing, not a test run. `TrayWidget.build()` used
+  `mainAxisAlignment: spaceEvenly` with 3 slots each sized to their natural
+  `traySlotCellSize * 5` — `spaceEvenly` only *distributes leftover space*,
+  it never shrinks children, so on a window where the tray's actual
+  available width came out smaller than the 3 slots' combined natural
+  width (334px available vs. ~378px needed in the reported case), the Row
+  overflowed instead of compressing. This is a distinct failure mode from
+  the second bug above (`traySlotCellSize` and `boardCellSize` diverging
+  between siblings) — here both values were internally consistent, the row
+  just didn't have enough room for them at *any* consistent value on a
+  narrow-enough window. Fixed by making the tray inherently overflow-proof
+  regardless of window size: each slot is wrapped in `Expanded(child:
+  Center(...))` (so the Row always divides its actual available width
+  three ways as a hard constraint — this alone guarantees the *Row* itself
+  can never overflow, since Expanded children are sized to exactly their
+  allocated flex share) and the slot's fixed-size content is wrapped in
+  `FittedBox(fit: BoxFit.scaleDown)` (so oversized content shrinks to fit
+  within whatever width Expanded actually gave it, rather than silently
+  painting outside its slot into a neighbor — Expanded bounds the *Row's*
+  layout, not what a plain `Center` child is allowed to paint). Both
+  changes are scoped to the **in-place tray display only**; the
+  `Draggable.feedback` (rendered through the `Overlay` during a drag, sized
+  off `boardCellSize`) is completely untouched by either wrapper, so none
+  of the drop-math correctness fixed across the previous four bugs is put
+  at risk — confirmed by rerunning `bottom_row_drag_test.dart` unchanged
+  after this fix and it still passing. Regression-tested directly in
+  `test/tray_overflow_test.dart`: pumps a `TrayWidget` inside a `SizedBox`
+  deliberately narrower than 3 natural-sized slots and asserts
+  `tester.takeException()` is `null` — verified this test actually fails
+  (reproducing the exact crash) against the pre-fix `spaceEvenly` code via
+  `git stash` before confirming it passes with the fix, so it's a real
+  regression guard and not a tautology. **If tray sizing ever changes
+  again, keep both the `Expanded` (Row-level) and `FittedBox`
+  (content-level) guards — either alone is insufficient**: `Expanded`
+  without `FittedBox` stops the crash but lets oversized art visually spill
+  into a neighboring slot; `FittedBox` without `Expanded` has no bounded
+  parent to shrink into and does nothing.
 - Verified end-to-end via a local Playwright-driven
   `flutter build web --release` + static-server session (drag from tray →
   live preview tint → drop → placement → score update; pause/resume
   overlay). See [[user_dev_machine_tooling]]-style notes in memory for the
   CanvasKit-gstatic-redirect + shadow-root-canvas gotchas this required —
-  same as every other web-verified game in this series.
+  same as every other web-verified game in this series. **Note**: Flutter
+  web's CanvasKit renderer paints everything to a `<canvas>`, so
+  Playwright's DOM-text locators (`getByText`, etc.) cannot find or click
+  in-game buttons/text — that verification path only works for
+  screenshot/console-log checks (e.g. confirming no `RenderFlex overflow`
+  console error appears at a given viewport width), not for driving actual
+  gameplay interactions; use a `flutter_test` gesture-driven test (like
+  `bottom_row_drag_test.dart` or `tray_overflow_test.dart`) for anything
+  that needs to click/drag a specific widget.
 
 **Scoring**: 1 point per placed cell; a line clear scores
 `10*linesCleared + 10*(linesCleared-1)` (multi-clear bonus) multiplied by

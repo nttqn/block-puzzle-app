@@ -32,10 +32,18 @@ class TrayWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Each slot gets an equal, *bounded* third of the row via Expanded —
+    // giving _buildSlot's FittedBox something concrete to shrink into.
+    // Without a hard width bound here, 3 slots sized at their natural
+    // traySlotCellSize could exceed the row's actual available width on
+    // some window sizes (this shipped as a real "RenderFlex overflowed"
+    // crash — traySlotCellSize is derived from the board's own layout,
+    // which isn't guaranteed to leave exactly this much room for the tray
+    // in every aspect ratio) and FittedBox alone does nothing without a
+    // bounded parent to fit into.
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        for (var i = 0; i < engine.tray.length; i++) _buildSlot(context, i),
+        for (var i = 0; i < engine.tray.length; i++) Expanded(child: Center(child: _buildSlot(context, i))),
       ],
     );
   }
@@ -46,7 +54,18 @@ class TrayWidget extends StatelessWidget {
     if (piece == null) {
       return SizedBox(width: slotSize, height: slotSize);
     }
+    // FittedBox shrinks the slot's fixed-size content (drawn at slotSize,
+    // which is derived from the board's layout and can exceed what Expanded
+    // actually allocates this slot in the Row) down to fit — Expanded alone
+    // only guarantees the Row itself doesn't overflow; it doesn't stop an
+    // oversized child from visually spilling past its slot into a neighbor.
+    // Scoped to the in-place display only: the returned Draggable's `feedback`
+    // is painted through the Overlay during a drag, entirely outside this
+    // FittedBox, so it stays sized off boardCellSize untouched.
+    return FittedBox(fit: BoxFit.scaleDown, child: _buildDraggable(piece, index, slotSize));
+  }
 
+  Widget _buildDraggable(PieceInstance piece, int index, double slotSize) {
     // The whole slot (not just the piece's drawn cubes) must be grabbable —
     // a shape's empty cells and the small gaps between adjacent cubes are
     // otherwise dead zones a real finger can easily land in, silently
