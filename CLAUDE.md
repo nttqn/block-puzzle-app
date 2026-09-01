@@ -58,20 +58,41 @@ tetrominoes (all rotations), a plus-pentomino, big-L and P pentominoes.
 image per color, sliced from a single sprite sheet the user supplied at
 `assets/block.png` (kept unbundled — not listed in `pubspec.yaml`'s
 assets — purely a source reference, the same relationship `sound_src/` has
-to `assets/audio/`). The slicing script
-(`PowerShell + System.Drawing`, no ImageMagick on this machine — see
-[[user_dev_machine_tooling]]) crops the sheet's 4x2 grid into 8 tiles and
-does a chroma-key-style background removal (sample the sheet's corner
-pixel, zero alpha within a distance threshold) since the source sheet has
-no alpha channel. `BlockCell` (`lib/widgets/piece_view.dart`) checks this
-map first and renders the matching `Image.asset` when the cell's color has
-one; any color with no entry (currently only the survival-mode bomb's
-`kBombColor`) falls back to the original procedural gradient box — so the
-gradient path still exists and is exercised, it's not dead code. The
-line-clear "flash brighter" effect (`bright: true`) is done as a
+to `assets/audio/`). `BlockCell` (`lib/widgets/piece_view.dart`) checks
+this map first and renders the matching `Image.asset` when the cell's
+color has one; any color with no entry (currently only the survival-mode
+bomb's `kBombColor`) falls back to the original procedural gradient box —
+so the gradient path still exists and is exercised, it's not dead code.
+The line-clear "flash brighter" effect (`bright: true`) is done as a
 semi-transparent white overlay stacked on top of the art for image-backed
-cells, rather than trying to source/generate a separately-brightened
-image per color.
+cells, rather than trying to source/generate a separately-brightened image
+per color.
+
+The slicing script (`PowerShell + System.Drawing`, no ImageMagick on this
+machine — see [[user_dev_machine_tooling]]) went through two versions:
+- **v1** (source sheet had no alpha channel): cropped the 4x2 grid into 8
+  fixed-size `sheetW/4 x sheetH/2` tiles, then chroma-keyed the background
+  (sample a corner pixel, zero alpha within an RGB distance threshold).
+  This produced non-square tiles (the sheet's cells were taller than
+  wide), which `BoxFit.contain` then letterboxed inside each square board
+  cell — wasted space — and the distance-threshold approach let a sliver
+  of the *neighboring* tile's color bleed into the crop along shared edges
+  in a couple of cases.
+- **v2** (current, after the user regenerated the source sheet with a real
+  alpha channel): crops per-tile using the *actual alpha data* instead —
+  scan each nominal `sheetW/4 x sheetH/2` region for the tight bounding box
+  of pixels at or above an alpha threshold (128), then crop a **square**
+  centered on that bounding box (side = `max(bboxW, bboxH) * 1.03`, small
+  margin), so every output PNG is exactly square and sized to the actual
+  block art, not the sheet's nominal (non-square) grid cell. A final pass
+  hard-zeros any pixel with alpha below 60 within the crop, since the
+  source's soft glow/feather can leave a faint semi-transparent halo out to
+  a fairly wide radius that would otherwise blend into an adjacent board
+  cell's own art once tiled. If the sprite sheet is ever regenerated again,
+  re-run this alpha-bbox approach rather than reverting to fixed-size
+  cropping or a color-distance chroma key — both were the actual bugs the
+  user reported ("cut to exact square dimensions," "remove background with
+  leftover pixels") that this version fixed.
 
 **`lib/game/game_engine.dart`** (`GameEngine extends ChangeNotifier`) is the
 whole game's logic, deliberately Flutter-widget-free so it's unit-testable
