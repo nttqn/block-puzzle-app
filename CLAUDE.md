@@ -93,21 +93,27 @@ machine — see [[user_dev_machine_tooling]]) went through two versions:
   cell — wasted space — and the distance-threshold approach let a sliver
   of the *neighboring* tile's color bleed into the crop along shared edges
   in a couple of cases.
-- **v2** (current, after the user regenerated the source sheet with a real
-  alpha channel): crops per-tile using the *actual alpha data* instead —
-  scan each nominal `sheetW/4 x sheetH/2` region for the tight bounding box
-  of pixels at or above an alpha threshold (128), then crop a **square**
-  centered on that bounding box (side = `max(bboxW, bboxH) * 1.03`, small
-  margin), so every output PNG is exactly square and sized to the actual
-  block art, not the sheet's nominal (non-square) grid cell. A final pass
-  hard-zeros any pixel with alpha below 60 within the crop, since the
-  source's soft glow/feather can leave a faint semi-transparent halo out to
-  a fairly wide radius that would otherwise blend into an adjacent board
-  cell's own art once tiled. If the sprite sheet is ever regenerated again,
-  re-run this alpha-bbox approach rather than reverting to fixed-size
-  cropping or a color-distance chroma key — both were the actual bugs the
-  user reported ("cut to exact square dimensions," "remove background with
-  leftover pixels") that this version fixed.
+- **v2** (after the user regenerated the source sheet with a real alpha
+  channel): crops per-tile using the *actual alpha data* instead — scan
+  each nominal `sheetW/4 x sheetH/2` region for the tight bounding box of
+  pixels at or above an alpha threshold (128), then crop a **square**
+  centered on that bounding box, so every output PNG is exactly square and
+  sized to the actual block art, not the sheet's nominal (non-square) grid
+  cell. A final pass hard-zeros any pixel with alpha below 60 within the
+  crop, since the source's soft glow/feather can leave a faint
+  semi-transparent halo that would otherwise blend into an adjacent board
+  cell's own art once tiled. v2 used `side = max(bboxW, bboxH) * 1.03` (a
+  3% safety margin), which turned out to leave a visible few-pixel fully-
+  transparent border around the block — harmless in isolation, but visible
+  as a gap once cells sit edge-to-edge on the board.
+- **v3** (current): same alpha-bbox approach, but `side = max(bboxW,
+  bboxH) * 0.99` (flush, very slightly trimmed) instead of `* 1.03` — the
+  block's own content now starts at pixel 0-1 of the image with no
+  transparent margin. If the sprite sheet is ever regenerated again, reuse
+  this v3 alpha-bbox-with-flush-crop approach — v1's fixed-size/chroma-key
+  crop and v2's `1.03` margin were both real bugs the user caught from
+  screenshots ("cut to exact square dimensions," "remove background with
+  leftover pixels," "still trash pixels around each block, crop tighter").
 
 **`lib/game/game_engine.dart`** (`GameEngine extends ChangeNotifier`) is the
 whole game's logic, deliberately Flutter-widget-free so it's unit-testable
