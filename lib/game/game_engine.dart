@@ -27,6 +27,12 @@ class GameEngine extends ChangeNotifier {
   /// they actually disappear. Empty outside of that brief window.
   Set<Point> clearingCells = {};
 
+  /// The most recent line-clear score popup (points + where to show it),
+  /// paired with a sequence number the UI bumps-detects to know a *new*
+  /// popup fired vs. re-reading the same one on an unrelated rebuild.
+  ScorePopup? popup;
+  int popupSeq = 0;
+
   Future<void> start() async {
     best = await ScoreService.instance.loadBest();
     board = List.generate(boardSize, (_) => List<Color?>.filled(boardSize, null));
@@ -122,7 +128,13 @@ class GameEngine extends ChangeNotifier {
       var linePoints = totalLines * 10;
       if (totalLines > 1) linePoints += (totalLines - 1) * 10;
       final comboMultiplier = 1 + (combo - 1) * 0.5;
-      score += (linePoints * comboMultiplier).round();
+      final bonus = (linePoints * comboMultiplier).round();
+      score += bonus;
+
+      final centroidRow = flashed.map((p) => p.x).reduce((a, b) => a + b) / flashed.length;
+      final centroidCol = flashed.map((p) => p.y).reduce((a, b) => a + b) / flashed.length;
+      popup = ScorePopup(points: bonus, row: centroidRow, col: centroidCol);
+      popupSeq++;
     } else {
       combo = 0;
     }
@@ -179,4 +191,14 @@ class Point {
 
   @override
   int get hashCode => Object.hash(x, y);
+}
+
+/// A one-shot "+N" floating score popup, centered on the cleared cells'
+/// centroid (in board row/col units, fractional so it can land between
+/// cells for a multi-line clear).
+class ScorePopup {
+  final int points;
+  final double row;
+  final double col;
+  const ScorePopup({required this.points, required this.row, required this.col});
 }

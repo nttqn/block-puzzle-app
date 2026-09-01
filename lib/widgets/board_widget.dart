@@ -19,12 +19,53 @@ class BoardWidget extends StatefulWidget {
   State<BoardWidget> createState() => _BoardWidgetState();
 }
 
-class _BoardWidgetState extends State<BoardWidget> {
+class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin {
   final GlobalKey _boardKey = GlobalKey();
   int? _previewRow;
   int? _previewCol;
   PieceInstance? _previewPiece;
   bool _previewValid = false;
+
+  int _lastPopupSeq = 0;
+  final List<_ActivePopup> _activePopups = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _lastPopupSeq = widget.engine.popupSeq;
+  }
+
+  @override
+  void didUpdateWidget(covariant BoardWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final popup = widget.engine.popup;
+    if (widget.engine.popupSeq != _lastPopupSeq && popup != null) {
+      _lastPopupSeq = widget.engine.popupSeq;
+      _addPopup(popup);
+    }
+  }
+
+  void _addPopup(ScorePopup popup) {
+    final controller = AnimationController(duration: const Duration(milliseconds: 900), vsync: this);
+    final entry = _ActivePopup(popup: popup, controller: controller);
+    controller.addListener(() => setState(() {}));
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() => _activePopups.remove(entry));
+        controller.dispose();
+      }
+    });
+    setState(() => _activePopups.add(entry));
+    controller.forward();
+  }
+
+  @override
+  void dispose() {
+    for (final entry in _activePopups) {
+      entry.controller.dispose();
+    }
+    super.dispose();
+  }
 
   void _updatePreview(DragTargetDetails<TrayDragData> details, double cellSize) {
     final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
@@ -81,6 +122,7 @@ class _BoardWidgetState extends State<BoardWidget> {
                 border: Border.all(color: const Color(0xFF0E141C), width: 3),
               ),
               child: Stack(
+                clipBehavior: Clip.none,
                 children: [
                   for (var r = 0; r < size; r++)
                     for (var c = 0; c < size; c++)
@@ -111,12 +153,46 @@ class _BoardWidgetState extends State<BoardWidget> {
                             ),
                           ),
                         ),
+                  for (final entry in _activePopups) _buildPopup(entry, cellSize),
                 ],
               ),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildPopup(_ActivePopup entry, double cellSize) {
+    final t = entry.controller.value;
+    // Rises steadily for the whole animation, but only starts fading out
+    // in the back half so the number reads clearly for a beat first.
+    final rise = cellSize * 1.8 * Curves.easeOut.transform(t);
+    final opacity = t < 0.5 ? 1.0 : 1.0 - Curves.easeIn.transform((t - 0.5) * 2);
+    final centerX = (entry.popup.col + 0.5) * cellSize;
+    final centerY = (entry.popup.row + 0.5) * cellSize;
+    return Positioned(
+      left: centerX - cellSize * 2,
+      top: centerY - cellSize * 0.5 - rise,
+      width: cellSize * 4,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Text(
+            '+${entry.popup.points}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.amberAccent,
+              fontSize: cellSize * 1.1,
+              fontWeight: FontWeight.w900,
+              shadows: const [
+                Shadow(color: Colors.black, blurRadius: 6),
+                Shadow(color: Colors.black, blurRadius: 2, offset: Offset(0, 1)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -140,4 +216,10 @@ class _BoardWidgetState extends State<BoardWidget> {
             ),
     );
   }
+}
+
+class _ActivePopup {
+  final ScorePopup popup;
+  final AnimationController controller;
+  const _ActivePopup({required this.popup, required this.controller});
 }

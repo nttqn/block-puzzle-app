@@ -159,7 +159,15 @@ real trial-and-error, worth understanding before touching either file:
 **Scoring**: 1 point per placed cell; a line clear scores
 `10*linesCleared + 10*(linesCleared-1)` (multi-clear bonus) multiplied by
 `1 + (combo-1)*0.5` where `combo` is the consecutive-clearing-placement
-streak. Best score persists via `shared_preferences`
+streak. Every line clear also sets `GameEngine.popup` (a `ScorePopup` with
+the bonus amount and the centroid row/col of the cleared cells) and bumps
+`popupSeq` — `BoardWidget` compares `popupSeq` against what it last saw (in
+`didUpdateWidget`, since the same `GameEngine` instance is reused across
+rebuilds so field equality can't signal "this is a new event") and, on a
+change, spins up a short-lived `AnimationController` rendering a rising,
+fading "+N" `Text` centered on that centroid — this is the floating score
+popup genre games show on a successful clear (added on user request,
+matching a reference screenshot). Best score persists via `shared_preferences`
 (`lib/services/score_service.dart`).
 
 **Back button = pause, not exit**: `GameScreen` uses `PopScope(canPop:
