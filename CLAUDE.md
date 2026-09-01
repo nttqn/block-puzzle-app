@@ -68,6 +68,21 @@ semi-transparent white overlay stacked on top of the art for image-backed
 cells, rather than trying to source/generate a separately-brightened image
 per color.
 
+**Gap between placed cells**: `BoardWidget._buildCell` wraps every cell
+(empty or filled) in an outer `Padding(EdgeInsets.all(1))` for the
+grid-line-style separation between cells — `BlockCell` itself also takes
+an `inset` parameter that adds further padding *inside* whatever box it's
+given. These used to be applied **both** for board cells (outer Padding(1)
++ `BlockCell(inset: 1)`), doubling the visible gap between two adjacent
+placed blocks to a noticeably wide seam once the block art itself was
+tightly cropped with near-zero internal margin (a user screenshot flagged
+this after the art re-crop above). Fixed by passing `inset: 0` to
+`BlockCell` from `_buildCell` specifically, relying solely on the outer
+Padding for board-cell separation — `PieceView`'s own `BlockCell` calls
+(tray display and drag feedback) still use their own proportional inset
+(`cellSize * 0.06`) and are unaffected; that gap is between cells of the
+*same* piece and was never doubled up this way.
+
 The slicing script (`PowerShell + System.Drawing`, no ImageMagick on this
 machine — see [[user_dev_machine_tooling]]) went through two versions:
 - **v1** (source sheet had no alpha channel): cropped the 4x2 grid into 8

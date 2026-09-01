@@ -219,7 +219,11 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                 )
               : AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
-                  child: BlockCell(color: color, inset: 1, bright: isClearing),
+                  // inset: 0 here, not the usual small gap — the outer
+                  // Padding(1) above already separates this cell from its
+                  // neighbors, so adding another inset on top of that
+                  // doubled the visible gap between adjacent placed blocks.
+                  child: BlockCell(color: color, inset: 0, bright: isClearing),
                 ),
     );
   }
