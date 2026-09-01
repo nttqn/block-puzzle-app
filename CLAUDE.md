@@ -67,7 +67,7 @@ whole game's logic, deliberately Flutter-widget-free so it's unit-testable
 `lib/widgets/board_widget.dart`)** — the one part of this build that took
 real trial-and-error, worth understanding before touching either file:
 - The board is a *single* `DragTarget<TrayDragData>` covering the whole
-  8x8 grid (not 64 individual targets). The dropped/hovered cell is
+  grid (not one target per cell). The dropped/hovered cell is
   computed by converting `DragTargetDetails.offset` (confirmed via
   instrumented testing to be the **feedback widget's global top-left
   corner**, already accounting for `feedbackOffset` and the anchor
@@ -97,6 +97,31 @@ real trial-and-error, worth understanding before touching either file:
   gestures ever stop registering again, suspect this exact class of bug
   first (something wrapping `Draggable.child` in a widget that doesn't
   paint solidly across the area you expect to be grabbable).
+- **A second real bug, found after a user report of "can't place on the
+  top rows" on a wide desktop window**: `GameScreen` computed the tray's
+  `boardCellSize` from its own `LayoutBuilder`, using
+  `(constraints.maxWidth - 32) / boardSize` — the *tray section's* width,
+  which is the full window width. The *board's* actual cell size comes
+  from a completely different `LayoutBuilder` (`min(width, height*0.62)`
+  inside the `Expanded` area). These two only happened to be close in a
+  narrow mobile viewport (where dev testing had been done); on a wide
+  window the tray's estimate came out several times larger than the
+  board's real cell size, which fed into both the feedback's rendering
+  scale *and* `feedbackOffset`'s magnitude — inflating the "lift the piece
+  above the finger" distance to several times a real board row. That
+  pushed the pointer position needed to reach the top rows off the board
+  entirely (or required the pointer near/past the bottom edge). Fixed by
+  having `GameScreen` measure the board's real cell size once (inside its
+  own `LayoutBuilder`, the authoritative source since `BoardWidget` is
+  given a tight `SizedBox` of exactly that size) and pushing it to the
+  tray via a `ValueNotifier` (updated through
+  `addPostFrameCallback` to avoid `setState`-during-build), instead of
+  letting the tray re-derive its own estimate from an unrelated
+  constraint. **Lesson**: any two widgets that both need "the board's
+  pixel cell size" must read the exact same computed value — never let a
+  sibling independently re-derive it from its own local constraints, even
+  if the formulas look equivalent, since they can be fed different
+  constraint boxes by the layout tree.
 - Verified end-to-end via a local Playwright-driven
   `flutter build web --release` + static-server session (drag from tray →
   live preview tint → drop → placement → score update; pause/resume
