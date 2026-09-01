@@ -80,12 +80,19 @@ real trial-and-error, worth understanding before touching either file:
 - Each tray piece drags via a plain `Draggable` (default
   `childDragAnchorStrategy`, so the finger stays at the same *relative*
   position within the feedback even though the feedback renders larger
-  than the tray thumbnail — see below) with `feedbackOffset: Offset(0,
-  -boardCellSize * 3)` to lift the piece up above the finger so it's
-  visible while dragging (standard genre UX; the piece "grows" on pickup
-  since the feedback renders at full board-cell scale vs. the tray's
-  smaller display scale — also standard and was a deliberate choice, not
-  a bug).
+  than the tray thumbnail — a deliberate "the piece grows on pickup" genre
+  convention, not a bug). The piece is lifted above the finger for
+  visibility using a `Transform.translate` *inside* the `feedback` widget
+  itself — **not** `Draggable.feedbackOffset`. This distinction matters a
+  lot: `feedbackOffset` shifts the actual tracked/reported position
+  (`DragTargetDetails.offset`, see above) that the drop math reads, so any
+  nonzero value there means a piece's *drawn* position and its *actual drop
+  cell* diverge — the finger has to hover somewhere other than where the
+  piece visually is. A `Transform.translate` only shifts paint, leaving the
+  feedback's tracked layout position untouched, so the drop cell stays a
+  direct 1:1 mapping of finger position to board cell no matter what visual
+  lift is applied. See the third bug below for why this replaced an earlier
+  `feedbackOffset`-based version.
 - **The bug that actually broke dragging during development**: `Draggable`
   wrapped only `Center(child: PieceView(...))` as its child, so the
   hit-testable area was *exactly the drawn cube pixels* — any point in an
@@ -122,6 +129,26 @@ real trial-and-error, worth understanding before touching either file:
   sibling independently re-derive it from its own local constraints, even
   if the formulas look equivalent, since they can be fed different
   constraint boxes by the layout tree.
+- **A third bug, found immediately after fixing the second**: even with the
+  cell-size mismatch fixed, `feedbackOffset: Offset(0, -boardCellSize * N)`
+  is fundamentally the wrong tool for "lift the piece above the finger,"
+  because the board's `DragTarget` only reacts while the *raw pointer* is
+  over it, while the drop cell is computed from the *feedback's* offset
+  position (which the lift moves away from the pointer by construction).
+  For a piece near the top rows, this means the finger has to hover
+  *below* the visual target by the lift distance — for the very top row(s)
+  that pushes the required finger position uncomfortably close to (or
+  toward) the board's own edge, and is deeply unintuitive regardless (a
+  user's instinct is "put the piece where I see it," not "hover N rows
+  below where I want it to land"). A user hit exactly this hovering it near
+  the top row of a 12-row board even after the cell-size fix. Fixed for
+  good by switching to the `Transform.translate`-inside-`feedback` approach
+  described above — the drop cell is now always exactly where the pointer
+  is, with zero coupling to how the piece is drawn, so there is no lift
+  distance that can push any row (top or otherwise) out of reach. **Do not
+  reintroduce `feedbackOffset` on this widget** — if a future change wants
+  the piece to visually follow the finger less directly (e.g. some drift or
+  spring effect), implement it as paint-only, the same way.
 - Verified end-to-end via a local Playwright-driven
   `flutter build web --release` + static-server session (drag from tray →
   live preview tint → drop → placement → score update; pause/resume

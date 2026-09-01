@@ -61,8 +61,21 @@ class TrayWidget extends StatelessWidget {
 
     return Draggable<TrayDragData>(
       data: TrayDragData(piece: piece, trayIndex: index),
-      feedback: PieceView(piece: piece, cellSize: boardCellSize),
-      feedbackOffset: Offset(0, -boardCellSize * 3),
+      // feedbackOffset is deliberately left at zero: BoardWidget derives
+      // the drop cell from this feedback's tracked position (see its doc
+      // comment), so any nonzero feedbackOffset here would shift *where a
+      // piece actually lands* away from where it's drawn — requiring the
+      // finger to hover below the visual target to place a piece near the
+      // top rows, badly enough to make the very top row unreachable
+      // without the board running out of room below it. The lift-above-
+      // the-finger visual is instead done with a plain Transform inside
+      // the feedback itself, which only shifts paint, not the tracked
+      // layout position — so the drop math stays a direct 1:1 mapping of
+      // finger position to board cell, and only the drawing moves.
+      feedback: Transform.translate(
+        offset: Offset(0, -boardCellSize * 1.5),
+        child: PieceView(piece: piece, cellSize: boardCellSize),
+      ),
       childWhenDragging: Opacity(opacity: 0.25, child: display),
       child: display,
     );
