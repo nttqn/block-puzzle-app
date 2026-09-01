@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/game_mode.dart';
 import '../services/score_service.dart';
 import '../widgets/piece_view.dart';
 import '../models/piece.dart';
@@ -13,17 +14,24 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _best = 0;
+  final Map<GameMode, int> _bestByMode = {GameMode.classic: 0, GameMode.survival: 0};
 
   @override
   void initState() {
     super.initState();
-    _loadBest();
+    _loadBests();
   }
 
-  Future<void> _loadBest() async {
-    final best = await ScoreService.instance.loadBest();
-    if (mounted) setState(() => _best = best);
+  Future<void> _loadBests() async {
+    for (final mode in GameMode.values) {
+      final best = await ScoreService.instance.loadBest(mode);
+      if (mounted) setState(() => _bestByMode[mode] = best);
+    }
+  }
+
+  Future<void> _play(GameMode mode) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameScreen(mode: mode)));
+    _loadBests();
   }
 
   @override
@@ -41,22 +49,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 'BLOCK PUZZLE',
                 style: TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: 2),
               ),
+              const SizedBox(height: 40),
+              for (final mode in GameMode.values) ...[
+                _ModeButton(mode: mode, best: _bestByMode[mode] ?? 0, onTap: () => _play(mode)),
+                const SizedBox(height: 16),
+              ],
               const SizedBox(height: 8),
-              Text('Best score: $_best', style: const TextStyle(color: Colors.white54, fontSize: 16)),
-              const SizedBox(height: 48),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 18),
-                  textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: () async {
-                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GameScreen()));
-                  _loadBest();
-                },
-                child: const Text('PLAY'),
-              ),
-              const SizedBox(height: 16),
               TextButton(onPressed: () => _showHowToPlay(context), child: const Text('How to play')),
             ],
           ),
@@ -71,12 +69,55 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         title: const Text('How to play'),
         content: const Text(
-          'Drag blocks from the tray onto the 8x8 grid.\n\n'
+          'Drag blocks from the tray onto the grid.\n\n'
           'Fill an entire row or column to clear it and score points.\n\n'
           'Clear multiple lines at once, or clear lines back-to-back, for bonus combo points.\n\n'
-          'The game ends when none of your 3 blocks fit on the board.',
+          'Classic: the game ends when none of your 3 blocks fit on the board.\n\n'
+          'Survival: a bomb tile is always ticking down somewhere on the board — clear its row or column before time runs out, or it\'s game over.',
         ),
         actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Got it'))],
+      ),
+    );
+  }
+}
+
+class _ModeButton extends StatelessWidget {
+  final GameMode mode;
+  final int best;
+  final VoidCallback onTap;
+
+  const _ModeButton({required this.mode, required this.best, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 260,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          alignment: Alignment.centerLeft,
+        ),
+        onPressed: onTap,
+        child: Row(
+          children: [
+            Icon(mode == GameMode.survival ? Icons.local_fire_department : Icons.play_arrow, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    mode.label.toUpperCase(),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text('Best: $best', style: const TextStyle(fontSize: 12, color: Colors.white60)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

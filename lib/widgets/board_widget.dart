@@ -201,19 +201,23 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
   Widget _buildCell(int r, int c) {
     final color = widget.engine.board[r][c];
     final isClearing = widget.engine.clearingCells.contains(Point(r, c));
+    final bomb = widget.engine.bomb;
+    final isBomb = bomb != null && bomb.row == r && bomb.col == c;
     return Padding(
       padding: const EdgeInsets.all(1),
-      child: color == null
-          ? DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xFF232E3D),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            )
-          : AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              child: BlockCell(color: color, inset: 1, bright: isClearing),
-            ),
+      child: isBomb
+          ? BombCell(secondsLeft: bomb.secondsLeft)
+          : color == null
+              ? DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF232E3D),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                )
+              : AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  child: BlockCell(color: color, inset: 1, bright: isClearing),
+                ),
     );
   }
 }

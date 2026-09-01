@@ -10,6 +10,16 @@ banner + interstitial ads wired in, intended for Google Play. No leaderboard
 There is no native `android/` (or `ios/`/`web/`) directory committed — see
 "Android project is generated, not committed" below.
 
+Two game modes, picked from the home screen (`lib/screens/home_screen.dart`,
+one button per `GameMode` value) and passed into `GameScreen(mode: ...)`:
+- **Classic**: endless, ends when no tray piece fits anywhere.
+- **Survival**: same board/scoring, plus a bomb tile always ticking down
+  somewhere on the board — see "Survival mode / bomb tile" below.
+
+Best scores are tracked **per mode** (`ScoreService` keys off `GameMode`,
+see `lib/services/score_service.dart`) since Classic and Survival scores
+aren't comparable.
+
 ## Commands
 
 ```
@@ -176,6 +186,37 @@ of whether an earlier one is still animating) — `_activePopups` is a list,
 not a single slot, precisely so back-to-back placements each show their
 own number rather than one clobbering another. Best score persists via `shared_preferences`
 (`lib/services/score_service.dart`).
+
+**Survival mode / bomb tile** (`GameEngine.bomb`, a `BombTile { row, col,
+secondsLeft }`, plus `kBombColor` in `game_engine.dart`): a bomb is a board
+cell like any other — `board[row][col] = kBombColor` — so it's automatically
+"occupied" for `canPlacePieceAt` (pieces can't be placed on it) and
+automatically counts as "filled" toward its row/column being complete. This
+means defusing a bomb reuses the *existing* line-clear machinery entirely:
+no bomb-specific placement logic exists. `placePiece` only adds two bomb-
+aware steps around that: (1) right after computing `fullRows`/`fullCols`
+but before the clear-flash delay, if either contains the bomb's position,
+set `bomb = null` (so the UI stops showing/ticking it — the board cell
+itself gets nulled a few lines later along with the rest of the line, same
+as any other cell); (2) `_maybeSpawnBomb()` runs unconditionally near the
+end of every placement and is a no-op unless `mode == GameMode.survival &&
+bomb == null`, so a **new** bomb appears on a random empty cell immediately
+after the old one is defused — survival mode always has exactly one bomb
+ticking once the first one spawns (in `start()`), by design, not as a
+side effect. The countdown itself lives outside `placePiece` entirely: a
+`Timer.periodic(Duration(seconds: 1), _tickBomb)` started in `start()`
+(only for survival mode) and cancelled in `dispose()` and at the top of
+every `start()` call (so restarting doesn't leak a second timer ticking
+against the new game's `bomb` field) — `_tickBomb` decrements
+`bomb!.secondsLeft` and sets `gameOver = true` at zero, **independent of**
+whether any tray piece could still be placed (the two game-over conditions
+are unrelated and either can fire first). `_tickBomb` no-ops while `paused`
+(checked each tick rather than pausing/resuming the `Timer` itself — simpler
+than tracking elapsed-time-at-pause). Tested in
+`test/game_engine_test.dart`'s "survival mode bomb" group; the timeout path
+specifically needs `testWidgets` (not plain `test`) so `tester.pump(duration)`
+can fast-forward the real `Timer.periodic` — see that test's comment before
+changing bomb timing logic.
 
 **Back button = pause, not exit**: `GameScreen` uses `PopScope(canPop:
 gameOver, onPopInvokedWithResult: ...)` to toggle the pause overlay instead

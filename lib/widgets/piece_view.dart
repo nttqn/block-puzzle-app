@@ -67,3 +67,47 @@ class BlockCell extends StatelessWidget {
     );
   }
 }
+
+/// A survival-mode bomb tile: a dark, glowing disc with its remaining
+/// seconds — visually distinct from a normal placed [BlockCell] so it reads
+/// as "something you must act on," not just another color.
+class BombCell extends StatelessWidget {
+  final int secondsLeft;
+
+  const BombCell({super.key, required this.secondsLeft});
+
+  @override
+  Widget build(BuildContext context) {
+    final urgent = secondsLeft <= 5;
+    final glow = urgent ? Colors.redAccent : Colors.orangeAccent;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest.shortestSide;
+        return Padding(
+          padding: EdgeInsets.all(size * 0.05),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [Color.lerp(glow, Colors.black, 0.35)!, const Color(0xFF0B0D10)],
+              ),
+              border: Border.all(color: glow, width: size * 0.05),
+              boxShadow: [BoxShadow(color: glow.withValues(alpha: 0.6), blurRadius: size * 0.25)],
+            ),
+            child: Center(
+              child: Text(
+                '$secondsLeft',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: size * 0.5,
+                  shadows: [Shadow(color: glow, blurRadius: size * 0.15)],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

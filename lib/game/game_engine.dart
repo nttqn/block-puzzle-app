@@ -1,27 +1,45 @@
 import 'dart:async';
+import 'dart:math' show Random;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/piece.dart';
 import '../services/score_service.dart';
+import 'game_mode.dart';
 
-/// Core Block Puzzle game state: an 8x8 board, a 3-slot tray of pieces to
-/// place, score/combo tracking, and game-over detection. Pure Dart, no
-/// Flutter widget dependencies, so it can be unit-tested independently of
-/// the drag-and-drop UI.
+/// The board color a bomb tile is drawn with. Occupies its cell like any
+/// placed block (so `canPlacePieceAt` naturally refuses to place on it, and
+/// a row/column counts it as "filled" toward completing a line) but is
+/// rendered distinctly by the UI and carries its own countdown.
+const Color kBombColor = Color(0xFF14181D);
+
+/// Core Block Puzzle game state: a board, a 3-slot tray of pieces to place,
+/// score/combo tracking, game-over detection, and (in [GameMode.survival])
+/// a bomb tile racing a countdown. Pure Dart, no Flutter widget
+/// dependencies, so it can be unit-tested independently of the
+/// drag-and-drop UI.
 class GameEngine extends ChangeNotifier {
   static const int boardSize = 12;
   static const int trayCount = 3;
+  static const int bombSeconds = 25;
 
   List<List<Color?>> board = List.generate(boardSize, (_) => List<Color?>.filled(boardSize, null));
   List<PieceInstance?> tray = List<PieceInstance?>.filled(trayCount, null);
 
+  GameMode mode = GameMode.classic;
   int score = 0;
   int best = 0;
   int combo = 0;
   bool gameOver = false;
   bool paused = false;
+
+  /// The single active bomb tile in survival mode, or null in classic mode
+  /// / between one being defused and the next spawning.
+  BombTile? bomb;
+  Timer? _bombTimer;
+
+  final Random _rng = Random();
 
   /// Cells mid line-clear flash, purely for the UI to render brighter before
   /// they actually disappear. Empty outside of that brief window.
@@ -33,17 +51,60 @@ class GameEngine extends ChangeNotifier {
   ScorePopup? popup;
   int popupSeq = 0;
 
-  Future<void> start() async {
-    best = await ScoreService.instance.loadBest();
+  Future<void> start({GameMode mode = GameMode.classic}) async {
+    this.mode = mode;
+    best = await ScoreService.instance.loadBest(mode);
     board = List.generate(boardSize, (_) => List<Color?>.filled(boardSize, null));
     score = 0;
     combo = 0;
     gameOver = false;
     paused = false;
     clearingCells = {};
+    bomb = null;
     tray = List<PieceInstance?>.filled(trayCount, null);
     _refillTray();
+
+    _bombTimer?.cancel();
+    _bombTimer = null;
+    if (mode == GameMode.survival) {
+      _maybeSpawnBomb();
+      _bombTimer = Timer.periodic(const Duration(seconds: 1), _tickBomb);
+    }
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _bombTimer?.cancel();
+    super.dispose();
+  }
+
+  void _tickBomb(Timer timer) {
+    if (paused || gameOver || bomb == null) return;
+    bomb!.secondsLeft--;
+    if (bomb!.secondsLeft <= 0) {
+      gameOver = true;
+      unawaited(ScoreService.instance.saveBest(mode, score));
+      timer.cancel();
+    }
+    notifyListeners();
+  }
+
+  /// Picks a random empty cell to plant a bomb on, if none is currently
+  /// active. A no-op once the board has no empty cells left (an already
+  /// near-unwinnable state regardless).
+  void _maybeSpawnBomb() {
+    if (mode != GameMode.survival || bomb != null) return;
+    final emptyCells = <Point>[];
+    for (var r = 0; r < boardSize; r++) {
+      for (var c = 0; c < boardSize; c++) {
+        if (board[r][c] == null) emptyCells.add(Point(r, c));
+      }
+    }
+    if (emptyCells.isEmpty) return;
+    final chosen = emptyCells[_rng.nextInt(emptyCells.length)];
+    board[chosen.x][chosen.y] = kBombColor;
+    bomb = BombTile(row: chosen.x, col: chosen.y, secondsLeft: bombSeconds);
   }
 
   void togglePause() {
@@ -112,6 +173,10 @@ class GameEngine extends ChangeNotifier {
           flashed.add(Point(r, c));
         }
       }
+      if (bomb != null && (fullRows.contains(bomb!.row) || fullCols.contains(bomb!.col))) {
+        bomb = null;
+      }
+
       clearingCells = flashed;
       notifyListeners();
       HapticFeedback.mediumImpact();
@@ -152,15 +217,24 @@ class GameEngine extends ChangeNotifier {
       _refillTray();
     }
 
+    _maybeSpawnBomb();
+
     if (score > best) {
       best = score;
     }
 
     _checkGameOver();
     if (gameOver) {
-      unawaited(ScoreService.instance.saveBest(best));
+      unawaited(ScoreService.instance.saveBest(mode, score));
     }
     notifyListeners();
+  }
+
+  void _checkGameOver() {
+    for (final piece in tray) {
+      if (piece != null && _canPlaceAnywhere(piece)) return;
+    }
+    gameOver = true;
   }
 
   void _refillTray() {
@@ -180,13 +254,6 @@ class GameEngine extends ChangeNotifier {
       candidate = randomPiece();
     }
     return candidate;
-  }
-
-  void _checkGameOver() {
-    for (final piece in tray) {
-      if (piece != null && _canPlaceAnywhere(piece)) return;
-    }
-    gameOver = true;
   }
 }
 
@@ -210,4 +277,14 @@ class ScorePopup {
   final double row;
   final double col;
   const ScorePopup({required this.points, required this.row, required this.col});
+}
+
+/// A survival-mode bomb sitting on the board at (row, col), counting down.
+/// Defused by completing its row or column (a normal line clear); reaching
+/// zero seconds ends the run regardless of whether pieces could still fit.
+class BombTile {
+  final int row;
+  final int col;
+  int secondsLeft;
+  BombTile({required this.row, required this.col, required this.secondsLeft});
 }

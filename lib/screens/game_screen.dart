@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../game/game_engine.dart';
+import '../game/game_mode.dart';
 import '../services/ads_service.dart';
 import '../widgets/board_widget.dart';
 import '../widgets/tray_widget.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
+  final GameMode mode;
+
+  const GameScreen({super.key, this.mode = GameMode.classic});
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -29,7 +32,7 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     _engine.addListener(_onEngineChanged);
-    _engine.start();
+    _engine.start(mode: widget.mode);
     _bannerAd = AdsService.instance.createBannerAd(onLoaded: () => setState(() => _bannerLoaded = true));
   }
 
@@ -43,7 +46,7 @@ class _GameScreenState extends State<GameScreen> {
 
   void _restart() {
     _interstitialShown = false;
-    _engine.start();
+    _engine.start(mode: widget.mode);
   }
 
   @override
@@ -74,7 +77,7 @@ class _GameScreenState extends State<GameScreen> {
         backgroundColor: const Color(0xFF10161F),
         appBar: AppBar(
           backgroundColor: const Color(0xFF10161F),
-          title: const Text('Block Puzzle'),
+          title: Text(widget.mode == GameMode.survival ? 'Survival' : 'Classic'),
           actions: [
             IconButton(
               icon: Icon(_engine.paused ? Icons.play_arrow : Icons.pause),
@@ -93,6 +96,8 @@ class _GameScreenState extends State<GameScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         _ScoreTile(label: 'SCORE', value: _engine.score),
+                        if (_engine.mode == GameMode.survival && _engine.bomb != null)
+                          _BombTimerChip(secondsLeft: _engine.bomb!.secondsLeft),
                         _ScoreTile(label: 'BEST', value: _engine.best),
                       ],
                     ),
@@ -176,6 +181,40 @@ class _ScoreTile extends StatelessWidget {
           style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
         ),
       ],
+    );
+  }
+}
+
+class _BombTimerChip extends StatelessWidget {
+  final int secondsLeft;
+
+  const _BombTimerChip({required this.secondsLeft});
+
+  @override
+  Widget build(BuildContext context) {
+    final urgent = secondsLeft <= 5;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: (urgent ? Colors.redAccent : Colors.orangeAccent).withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: urgent ? Colors.redAccent : Colors.orangeAccent, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('💣', style: TextStyle(fontSize: 16)),
+          const SizedBox(width: 6),
+          Text(
+            '$secondsLeft s',
+            style: TextStyle(
+              color: urgent ? Colors.redAccent : Colors.orangeAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:block_puzzle/game/game_engine.dart';
+import 'package:block_puzzle/game/game_mode.dart';
 import 'package:block_puzzle/models/piece.dart';
 
 PieceInstance _singleCell() {
@@ -124,6 +125,72 @@ void main() {
 
       expect(engine.board[0].contains(null), isTrue, reason: 'row 0 should not have been cleared');
       expect(engine.gameOver, isTrue);
+    });
+  });
+
+  group('survival mode bomb', () {
+    test('classic mode never spawns a bomb', () async {
+      final engine = GameEngine();
+      await engine.start();
+      expect(engine.bomb, isNull);
+      engine.dispose();
+    });
+
+    test('starting survival mode spawns a bomb that occupies its cell', () async {
+      final engine = GameEngine();
+      await engine.start(mode: GameMode.survival);
+
+      expect(engine.bomb, isNotNull);
+      final bomb = engine.bomb!;
+      expect(engine.board[bomb.row][bomb.col], kBombColor);
+      // The tray's random pieces are chosen to always be placeable
+      // somewhere, so the bomb's own cell must never be requested for one.
+      expect(engine.canPlacePieceAt(_singleCell(), bomb.row, bomb.col), isFalse);
+
+      engine.dispose();
+    });
+
+    test('completing the bomb\'s row defuses it', () async {
+      final engine = GameEngine();
+      await engine.start(mode: GameMode.survival);
+      final bomb = engine.bomb!;
+
+      // Fill the rest of the bomb's row with a real placement; the bomb
+      // cell itself already counts as "filled" toward the row being full.
+      for (var c = 0; c < GameEngine.boardSize; c++) {
+        if (c != bomb.col) engine.board[bomb.row][c] = kPieceColors.first;
+      }
+      engine.tray[0] = _singleCell();
+      // Place a harmless single cell elsewhere just to drive placePiece's
+      // full-board rescan — the row is already complete before this call.
+      final targetRow = (bomb.row + 1) % GameEngine.boardSize;
+      final targetCol = engine.board[targetRow].indexWhere((cell) => cell == null);
+      await engine.placePiece(0, targetRow, targetCol);
+
+      // The old bomb's cell is cleared along with the rest of the row.
+      expect(engine.board[bomb.row][bomb.col], isNull);
+      // A fresh bomb spawns immediately to keep survival mode's pressure
+      // continuous — confirm it isn't still sitting at the old position
+      // (which would mean the defuse never actually happened).
+      if (engine.bomb != null) {
+        expect(engine.bomb!.row != bomb.row || engine.bomb!.col != bomb.col, isTrue);
+      }
+
+      engine.dispose();
+    });
+
+    testWidgets('bomb timeout ends the run even if pieces could still be placed', (tester) async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      final engine = GameEngine();
+      await engine.start(mode: GameMode.survival);
+      expect(engine.bomb, isNotNull);
+      engine.bomb!.secondsLeft = 1;
+
+      await tester.pump(const Duration(seconds: 1, milliseconds: 100));
+
+      expect(engine.gameOver, isTrue);
+      engine.dispose();
     });
   });
 }
