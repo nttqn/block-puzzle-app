@@ -48,21 +48,43 @@ class BlockCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = bright ? Color.lerp(color, Colors.white, 0.55)! : color;
+    final assetPath = kBlockAssetForColor[color];
     return Padding(
       padding: EdgeInsets.all(inset),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color.lerp(base, Colors.white, 0.35)!, base, Color.lerp(base, Colors.black, 0.15)!],
-          ),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 2, offset: const Offset(0, 1)),
-          ],
+      child: assetPath != null ? _buildArt(assetPath) : _buildGradient(),
+    );
+  }
+
+  Widget _buildArt(String assetPath) {
+    final art = Image.asset(assetPath, fit: BoxFit.contain);
+    if (!bright) return art;
+    // Line-clear flash: brighten the art itself rather than looking for a
+    // separately-colored asset — a plain white overlay blended on top reads
+    // as the same "about to disappear" pulse the gradient cells use.
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        art,
+        Positioned.fill(
+          child: Opacity(opacity: 0.55, child: ColoredBox(color: Colors.white)),
         ),
+      ],
+    );
+  }
+
+  Widget _buildGradient() {
+    final base = bright ? Color.lerp(color, Colors.white, 0.55)! : color;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color.lerp(base, Colors.white, 0.35)!, base, Color.lerp(base, Colors.black, 0.15)!],
+        ),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 2, offset: const Offset(0, 1)),
+        ],
       ),
     );
   }

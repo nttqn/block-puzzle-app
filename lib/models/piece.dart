@@ -31,6 +31,22 @@ const List<Color> kPieceColors = [
   Color(0xFFD81B60), // pink
 ];
 
+/// Glossy candy-block art (sliced from a single `assets/block.png` sprite
+/// sheet, see `CLAUDE.md`) for each entry in [kPieceColors], keyed by that
+/// same Color value. `BlockCell` renders this image instead of its gradient
+/// fallback whenever the cell's color has an entry here — colors with no
+/// entry (e.g. the survival-mode bomb tile's own color) keep the gradient.
+final Map<Color, String> kBlockAssetForColor = {
+  Color(0xFFE53935): 'assets/blocks/block_red.png',
+  Color(0xFFFB8C00): 'assets/blocks/block_orange.png',
+  Color(0xFFFDD835): 'assets/blocks/block_yellow.png',
+  Color(0xFF43A047): 'assets/blocks/block_green.png',
+  Color(0xFF00ACC1): 'assets/blocks/block_cyan.png',
+  Color(0xFF1E88E5): 'assets/blocks/block_blue.png',
+  Color(0xFF5E35B1): 'assets/blocks/block_purple.png',
+  Color(0xFFD81B60): 'assets/blocks/block_pink.png',
+};
+
 /// Every distinct shape a piece can spawn as, expressed as a grid of rows
 /// (each row a string; '#' = filled cell). Parsed once at startup into
 /// normalized [Cell] lists.

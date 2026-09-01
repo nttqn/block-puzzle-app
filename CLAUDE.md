@@ -53,6 +53,26 @@ strings (`_shapeGrids`), parsed once into normalized `Cell` lists
 `kPieceColors`. Roughly 35 shapes: lines (1-5 long), squares, L/J/T/S/Z
 tetrominoes (all rotations), a plus-pentomino, big-L and P pentominoes.
 
+**Block art**: `kBlockAssetForColor` (same file) maps each of the 8
+`kPieceColors` entries to a PNG under `assets/blocks/` — one glossy block
+image per color, sliced from a single sprite sheet the user supplied at
+`assets/block.png` (kept unbundled — not listed in `pubspec.yaml`'s
+assets — purely a source reference, the same relationship `sound_src/` has
+to `assets/audio/`). The slicing script
+(`PowerShell + System.Drawing`, no ImageMagick on this machine — see
+[[user_dev_machine_tooling]]) crops the sheet's 4x2 grid into 8 tiles and
+does a chroma-key-style background removal (sample the sheet's corner
+pixel, zero alpha within a distance threshold) since the source sheet has
+no alpha channel. `BlockCell` (`lib/widgets/piece_view.dart`) checks this
+map first and renders the matching `Image.asset` when the cell's color has
+one; any color with no entry (currently only the survival-mode bomb's
+`kBombColor`) falls back to the original procedural gradient box — so the
+gradient path still exists and is exercised, it's not dead code. The
+line-clear "flash brighter" effect (`bright: true`) is done as a
+semi-transparent white overlay stacked on top of the art for image-backed
+cells, rather than trying to source/generate a separately-brightened
+image per color.
+
 **`lib/game/game_engine.dart`** (`GameEngine extends ChangeNotifier`) is the
 whole game's logic, deliberately Flutter-widget-free so it's unit-testable
 (`test/game_engine_test.dart`) without pumping any widgets:
