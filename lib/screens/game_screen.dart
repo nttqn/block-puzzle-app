@@ -19,6 +19,12 @@ class _GameScreenState extends State<GameScreen> {
   bool _bannerLoaded = false;
   bool _interstitialShown = false;
 
+  // The board's real on-screen cell size, in pixels. The tray must drag its
+  // pieces' feedback at this exact scale — see board_widget.dart's doc
+  // comment on why a mismatch here breaks drag targeting, sometimes badly
+  // enough that whole rows become unreachable on wide/desktop windows.
+  final ValueNotifier<double> _boardCellSize = ValueNotifier<double>(40);
+
   @override
   void initState() {
     super.initState();
@@ -45,7 +51,15 @@ class _GameScreenState extends State<GameScreen> {
     _engine.removeListener(_onEngineChanged);
     _engine.dispose();
     _bannerAd?.dispose();
+    _boardCellSize.dispose();
     super.dispose();
+  }
+
+  void _reportBoardCellSize(double cellSize) {
+    if (_boardCellSize.value == cellSize) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _boardCellSize.value = cellSize;
+    });
   }
 
   @override
@@ -92,6 +106,7 @@ class _GameScreenState extends State<GameScreen> {
                             final boardExtent = constraints.maxWidth < constraints.maxHeight * 0.62
                                 ? constraints.maxWidth
                                 : constraints.maxHeight * 0.62;
+                            _reportBoardCellSize(boardExtent / GameEngine.boardSize);
                             return SizedBox(
                               width: boardExtent,
                               height: boardExtent,
@@ -104,9 +119,9 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final boardCellSize = (constraints.maxWidth - 32) / GameEngine.boardSize;
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _boardCellSize,
+                      builder: (context, boardCellSize, _) {
                         return TrayWidget(
                           engine: _engine,
                           traySlotCellSize: boardCellSize * 0.55,
