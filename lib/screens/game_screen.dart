@@ -5,6 +5,7 @@ import '../game/game_engine.dart';
 import '../game/game_mode.dart';
 import '../services/ads_service.dart';
 import '../services/sound_service.dart';
+import '../widgets/app_background.dart';
 import '../widgets/board_widget.dart';
 import '../widgets/sound_toggle_button.dart';
 import '../widgets/tray_widget.dart';
@@ -35,7 +36,9 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     _engine.addListener(_onEngineChanged);
     _engine.start(mode: widget.mode);
-    _bannerAd = AdsService.instance.createBannerAd(onLoaded: () => setState(() => _bannerLoaded = true));
+    _bannerAd = AdsService.instance.createBannerAd(
+      onLoaded: () => setState(() => _bannerLoaded = true),
+    );
   }
 
   void _onEngineChanged() {
@@ -88,9 +91,13 @@ class _GameScreenState extends State<GameScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF10161F),
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF10161F),
-          title: Text(widget.mode == GameMode.survival ? 'Survival' : 'Classic'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text(
+            widget.mode == GameMode.survival ? 'Survival' : 'Classic',
+          ),
           actions: [
             const SoundToggleButton(),
             IconButton(
@@ -99,82 +106,99 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ],
         ),
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _ScoreTile(label: 'SCORE', value: _engine.score),
-                        if (_engine.mode == GameMode.survival && _engine.bomb != null)
-                          _BombTimerChip(secondsLeft: _engine.bomb!.secondsLeft),
-                        _ScoreTile(label: 'BEST', value: _engine.best),
-                      ],
+        body: AppBackground(
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    // extendBodyBehindAppBar lets the background image show
+                    // through the transparent AppBar, but that also means
+                    // body content starts from the very top of the screen —
+                    // push it down to clear the AppBar's own height first.
+                    const SizedBox(height: kToolbarHeight),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _ScoreTile(label: 'SCORE', value: _engine.score),
+                          if (_engine.mode == GameMode.survival &&
+                              _engine.bomb != null)
+                            _BombTimerChip(
+                              secondsLeft: _engine.bomb!.secondsLeft,
+                            ),
+                          _ScoreTile(label: 'BEST', value: _engine.best),
+                        ],
+                      ),
                     ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            // Fill nearly all of the space Expanded actually
-                            // gives this area (only a small margin, not an
-                            // arbitrary shrink) so the board doesn't float
-                            // in a sea of empty space on tall phone screens.
-                            final boardExtent = constraints.maxWidth < constraints.maxHeight * 0.96
-                                ? constraints.maxWidth
-                                : constraints.maxHeight * 0.96;
-                            _reportBoardCellSize(boardExtent / GameEngine.boardSize);
-                            return SizedBox(
-                              width: boardExtent,
-                              height: boardExtent,
-                              child: BoardWidget(engine: _engine),
-                            );
-                          },
+                    Expanded(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              // Fill nearly all of the space Expanded actually
+                              // gives this area (only a small margin, not an
+                              // arbitrary shrink) so the board doesn't float
+                              // in a sea of empty space on tall phone screens.
+                              final boardExtent =
+                                  constraints.maxWidth <
+                                      constraints.maxHeight * 0.96
+                                  ? constraints.maxWidth
+                                  : constraints.maxHeight * 0.96;
+                              _reportBoardCellSize(
+                                boardExtent / GameEngine.boardSize,
+                              );
+                              return SizedBox(
+                                width: boardExtent,
+                                height: boardExtent,
+                                child: BoardWidget(engine: _engine),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: ValueListenableBuilder<double>(
-                      valueListenable: _boardCellSize,
-                      builder: (context, boardCellSize, _) {
-                        return TrayWidget(
-                          engine: _engine,
-                          traySlotCellSize: boardCellSize * 0.55,
-                          boardCellSize: boardCellSize,
-                        );
-                      },
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _boardCellSize,
+                        builder: (context, boardCellSize, _) {
+                          return TrayWidget(
+                            engine: _engine,
+                            traySlotCellSize: boardCellSize * 0.55,
+                            boardCellSize: boardCellSize,
+                          );
+                        },
+                      ),
                     ),
+                    if (_bannerLoaded && _bannerAd != null)
+                      SizedBox(
+                        width: _bannerAd!.size.width.toDouble(),
+                        height: _bannerAd!.size.height.toDouble(),
+                        child: AdWidget(ad: _bannerAd!),
+                      ),
+                  ],
+                ),
+                if (_engine.paused && !_engine.gameOver)
+                  _PauseOverlay(
+                    onResume: _togglePauseWithSound,
+                    onRestart: _restart,
+                    onExit: _exitToMenu,
                   ),
-                  if (_bannerLoaded && _bannerAd != null)
-                    SizedBox(
-                      width: _bannerAd!.size.width.toDouble(),
-                      height: _bannerAd!.size.height.toDouble(),
-                      child: AdWidget(ad: _bannerAd!),
-                    ),
-                ],
-              ),
-              if (_engine.paused && !_engine.gameOver)
-                _PauseOverlay(
-                  onResume: _togglePauseWithSound,
-                  onRestart: _restart,
-                  onExit: _exitToMenu,
-                ),
-              if (_engine.gameOver)
-                _GameOverOverlay(
-                  score: _engine.score,
-                  best: _engine.best,
-                  onRestart: _restart,
-                  onExit: _exitToMenu,
-                ),
-            ],
+                if (_engine.gameOver)
+                  _GameOverOverlay(
+                    score: _engine.score,
+                    best: _engine.best,
+                    onRestart: _restart,
+                    onExit: _exitToMenu,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -193,10 +217,21 @@ class _ScoreTile extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12, letterSpacing: 1.5)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 12,
+            letterSpacing: 1.5,
+          ),
+        ),
         Text(
           '$value',
-          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ],
     );
@@ -214,9 +249,14 @@ class _BombTimerChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: (urgent ? Colors.redAccent : Colors.orangeAccent).withValues(alpha: 0.18),
+        color: (urgent ? Colors.redAccent : Colors.orangeAccent).withValues(
+          alpha: 0.18,
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: urgent ? Colors.redAccent : Colors.orangeAccent, width: 1.5),
+        border: Border.all(
+          color: urgent ? Colors.redAccent : Colors.orangeAccent,
+          width: 1.5,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -242,7 +282,11 @@ class _PauseOverlay extends StatelessWidget {
   final VoidCallback onRestart;
   final VoidCallback onExit;
 
-  const _PauseOverlay({required this.onResume, required this.onRestart, required this.onExit});
+  const _PauseOverlay({
+    required this.onResume,
+    required this.onRestart,
+    required this.onExit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +296,14 @@ class _PauseOverlay extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('PAUSED', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+            const Text(
+              'PAUSED',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: onResume,
@@ -265,7 +316,10 @@ class _PauseOverlay extends StatelessWidget {
               children: [
                 OutlinedButton(onPressed: onExit, child: const Text('Menu')),
                 const SizedBox(width: 16),
-                OutlinedButton(onPressed: onRestart, child: const Text('Restart')),
+                OutlinedButton(
+                  onPressed: onRestart,
+                  child: const Text('Restart'),
+                ),
               ],
             ),
           ],
@@ -281,7 +335,12 @@ class _GameOverOverlay extends StatelessWidget {
   final VoidCallback onRestart;
   final VoidCallback onExit;
 
-  const _GameOverOverlay({required this.score, required this.best, required this.onRestart, required this.onExit});
+  const _GameOverOverlay({
+    required this.score,
+    required this.best,
+    required this.onRestart,
+    required this.onExit,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -292,20 +351,39 @@ class _GameOverOverlay extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('GAME OVER', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+            const Text(
+              'GAME OVER',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
             if (isNewBest)
-              const Text('New Best!', style: TextStyle(color: Colors.amberAccent, fontSize: 18)),
+              const Text(
+                'New Best!',
+                style: TextStyle(color: Colors.amberAccent, fontSize: 18),
+              ),
             const SizedBox(height: 8),
-            Text('Score: $score', style: const TextStyle(color: Colors.white, fontSize: 20)),
-            Text('Best: $best', style: const TextStyle(color: Colors.white54, fontSize: 16)),
+            Text(
+              'Score: $score',
+              style: const TextStyle(color: Colors.white, fontSize: 20),
+            ),
+            Text(
+              'Best: $best',
+              style: const TextStyle(color: Colors.white54, fontSize: 16),
+            ),
             const SizedBox(height: 24),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 OutlinedButton(onPressed: onExit, child: const Text('Menu')),
                 const SizedBox(width: 16),
-                ElevatedButton(onPressed: onRestart, child: const Text('Play Again')),
+                ElevatedButton(
+                  onPressed: onRestart,
+                  child: const Text('Play Again'),
+                ),
               ],
             ),
           ],

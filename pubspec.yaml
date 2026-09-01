@@ -25,6 +25,7 @@ flutter:
   assets:
     - assets/icon/icon.png
     - assets/blocks/
+    - assets/backgrounds/bg.png
     - assets/audio/sfx_paint.wav
     - assets/audio/sfx_stick.wav
     - assets/audio/sfx_explosive.wav

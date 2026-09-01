@@ -83,8 +83,36 @@ Padding for board-cell separation — `PieceView`'s own `BlockCell` calls
 (`cellSize * 0.06`) and are unaffected; that gap is between cells of the
 *same* piece and was never doubled up this way.
 
-The slicing script (`PowerShell + System.Drawing`, no ImageMagick on this
-machine — see [[user_dev_machine_tooling]]) went through two versions:
+**App icon** (`assets/icon/icon.png`): a user-supplied wordmark
+(`block-puzzle-plus-logo.png`, kept at the repo root as a source reference,
+same relationship as `assets/block.png`) with a *baked-in* checkerboard
+background (`Format24bppRgb` — no alpha channel at all; the "transparent-
+looking" squares were literal light-gray/white pixels, not real
+transparency). A naive color-threshold removal was rejected up front
+because the checkerboard's two tones are close to the wordmark's own white
+"PUZZLE" lettering — a global threshold would have eaten into the text.
+Used a **flood fill from the image border** instead (`PowerShell +
+System.Drawing`, no ImageMagick — see [[user_dev_machine_tooling]]):
+seed a queue with every border pixel that looks checkerboard-like (bright,
+low saturation: all channels ≥225 and within 10 of each other), then
+BFS/flood-fill 4-connected neighbors that pass the same test, zeroing
+alpha for every visited pixel. This only removes background *connected to
+the edge* — the white lettering is enclosed by darker outline/shadow
+pixels and is never reached by the flood, so it survives untouched
+regardless of how similar its color is to the checkerboard. Hit the same
+`New-Object Type($expr)` PowerShell gotcha as the block-art script (see
+[[user_dev_machine_tooling]]) in a new form: `[int]($p / $w)` for decoding
+a flattened pixel index back to (x, y) intermittently rounded via
+banker's-rounding instead of truncating, producing an occasional
+off-by-one row and an `IndexOutOfRangeException` deep in the byte array —
+fixed by computing `$px = $p % $w; $py = ($p - $px) / $w` (exact integer
+division by construction, no cast ambiguity). This flood-fill-from-border
+technique — not a global color/distance threshold — is the one to reuse
+for any future "remove a background that's color-similar to real
+foreground content" task.
+
+The block-art slicing script (`PowerShell + System.Drawing`) went through
+two versions:
 - **v1** (source sheet had no alpha channel): cropped the 4x2 grid into 8
   fixed-size `sheetW/4 x sheetH/2` tiles, then chroma-keyed the background
   (sample a corner pixel, zero alpha within an RGB distance threshold).
@@ -369,3 +397,22 @@ exact same instance/behavior. Placing it in `GameScreen`'s AppBar (rather
 than inside `_PauseOverlay` itself) was a deliberate choice since the
 AppBar stays visible above the pause overlay anyway, so a second copy
 inside the overlay would just be a redundant duplicate control.
+
+**Background art** (`lib/widgets/app_background.dart`, an `AppBackground`
+shared by both `HomeScreen` and `GameScreen`): a full-bleed
+`Image.asset('assets/backgrounds/bg.png', fit: BoxFit.cover)` with a
+`Colors.black` scrim (`alpha: 0.45`) stacked on top, then the screen's real
+content on top of that. Source file kept at the repo root
+(`bg.png`) as a reference, same relationship as `assets/block.png` and
+`block-puzzle-plus-logo.png` — the bundled copy actually declared in
+`pubspec.yaml` lives at `assets/backgrounds/bg.png`. Both screens set
+`Scaffold.extendBodyBehindAppBar: true` and `AppBar.backgroundColor:
+Colors.transparent` so the image (and scrim) show through behind the
+AppBar too, rather than leaving a solid-color strip at the top —
+`GameScreen` specifically needs a `SizedBox(height: kToolbarHeight)` as
+the first item in its body `Column` to compensate (extending behind the
+AppBar means `SafeArea` no longer accounts for the AppBar's own height,
+only the system status bar). Gameplay legibility is unaffected by the
+scrim's darkness — `BoardWidget`'s cells and the tray both paint their own
+fully opaque backgrounds, so the scrim only shows through in the
+padding/HUD areas around them, not through the board or pieces themselves.
