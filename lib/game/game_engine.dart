@@ -81,7 +81,13 @@ class GameEngine extends ChangeNotifier {
     for (final cell in piece.cells) {
       board[originRow + cell.row][originCol + cell.col] = piece.color;
     }
-    score += piece.cells.length;
+    final pointsGained = piece.cells.length;
+    score += pointsGained;
+    var totalGainedThisMove = pointsGained;
+    final pieceCentroidRow =
+        originRow + piece.cells.map((c) => c.row).reduce((a, b) => a + b) / piece.cells.length;
+    final pieceCentroidCol =
+        originCol + piece.cells.map((c) => c.col).reduce((a, b) => a + b) / piece.cells.length;
     tray[trayIndex] = null;
     HapticFeedback.selectionClick();
 
@@ -130,14 +136,17 @@ class GameEngine extends ChangeNotifier {
       final comboMultiplier = 1 + (combo - 1) * 0.5;
       final bonus = (linePoints * comboMultiplier).round();
       score += bonus;
-
-      final centroidRow = flashed.map((p) => p.x).reduce((a, b) => a + b) / flashed.length;
-      final centroidCol = flashed.map((p) => p.y).reduce((a, b) => a + b) / flashed.length;
-      popup = ScorePopup(points: bonus, row: centroidRow, col: centroidCol);
-      popupSeq++;
+      totalGainedThisMove += bonus;
     } else {
       combo = 0;
     }
+
+    // Every successful placement earns at least the base per-cell points,
+    // so the "+N" popup fires every move, not just on a line clear — shown
+    // at the piece's own landing spot (which is always defined, unlike a
+    // cleared-line centroid that only exists when a clear happens).
+    popup = ScorePopup(points: totalGainedThisMove, row: pieceCentroidRow, col: pieceCentroidCol);
+    popupSeq++;
 
     if (tray.every((p) => p == null)) {
       _refillTray();
