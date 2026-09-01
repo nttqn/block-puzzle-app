@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/game_engine.dart';
 import '../models/piece.dart';
+import '../services/sound_service.dart';
 import 'piece_view.dart';
 
 /// Payload carried by a tray piece's Draggable — the board needs the tray
@@ -85,6 +86,13 @@ class TrayWidget extends StatelessWidget {
         child: PieceView(piece: piece, cellSize: boardCellSize),
       ),
       childWhenDragging: Opacity(opacity: 0.25, child: display),
+      // Fires when the piece is released somewhere that isn't any
+      // DragTarget at all (e.g. off the board entirely) — the invalid-
+      // placement-on-the-board case is handled separately in
+      // BoardWidget.onAcceptWithDetails, since the board always technically
+      // "accepts" the drag at the framework level and only our own check
+      // decides whether to actually place it.
+      onDraggableCanceled: (velocity, offset) => SoundService.instance.play(SoundEffect.pickupBack),
       child: display,
     );
   }

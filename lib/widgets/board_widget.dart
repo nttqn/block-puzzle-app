@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/game_engine.dart';
 import '../models/piece.dart';
+import '../services/sound_service.dart';
 import 'piece_view.dart';
 import 'tray_widget.dart';
 
@@ -109,6 +110,8 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
             if (row == null || col == null) return;
             if (widget.engine.canPlacePieceAt(details.data.piece, row, col)) {
               widget.engine.placePiece(details.data.trayIndex, row, col);
+            } else {
+              SoundService.instance.play(SoundEffect.pickupBack);
             }
           },
           builder: (context, candidateData, rejectedData) {

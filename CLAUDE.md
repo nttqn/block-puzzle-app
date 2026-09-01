@@ -257,3 +257,53 @@ of popping mid-round — mandatory rule for every game in this series.
 other games in this series, currently on Google's public TEST ad unit IDs
 (never swapped to real ones for this project yet). Interstitial shows
 roughly every other finished game, not after every one.
+
+**Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
+same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`
+holds the source WAVs, `assets/audio/` holds the bundled copies actually
+declared in `pubspec.yaml` (keep both in sync if a sound is ever
+added/replaced; there's no build step that copies one to the other).
+`SoundEffect` enum values map 1:1 to trigger points: `place`/`clear` fire
+from inside `GameEngine.placePiece` (same file, same spots as the existing
+`HapticFeedback` calls — this project already established the precedent of
+calling side-effect services directly from the engine rather than keeping
+it strictly UI-decoupled); `pickupBack` fires from two places since a piece
+can fail to place two different ways — `Draggable.onDraggableCanceled` in
+`tray_widget.dart` (dropped outside any `DragTarget` entirely) and
+`BoardWidget.onAcceptWithDetails`'s invalid-placement branch (dropped ON
+the board but on a cell it doesn't fit); `confirm`/`back` fire from
+`GameScreen`/`HomeScreen` button handlers (see their doc comments for the
+exact confirm-vs-back mapping). `init()` is fired **unawaited** from
+`main()`, each pool creation individually wrapped in try/catch +
+`.timeout(5s)` — this exact pattern exists because of a real incident in
+[[project_number_master_app]] where an unguarded `FlameAudio.createPool()`
+Future never resolved on web, hanging the entire app before its first
+frame; do not simplify this back to a bare `await`. Every `play()` call is
+`_pools[effect]?.start()` — a safe no-op if that pool never finished
+loading (or on `flutter test`, where no plugin is ever registered at all,
+so `_pools` just stays empty; this is *why* `GameEngine`'s existing unit
+tests never needed any audio mocking despite calling `placePiece` directly
+— check this stays true before adding new sound trigger points).
+**Known web-only limitation**: `flutter run -d chrome` / this project's
+Playwright-verification path throws a console
+`MissingPluginException(... audioplayers.global/events ...)` after
+`SoundService.init()` runs, because `audioplayers`' web implementation
+doesn't support a global event channel `flame_audio`'s `AudioPool` relies
+on internally. This does not crash or block anything (confirmed via
+Playwright: menus, dragging, and the sound toggle all still work
+correctly with this warning present) — it's in the same category as
+`AdsService` being a no-op on web, just noisier about it. Real sound
+playback can only be verified on an actual Android build, not the web
+preview used for the rest of this project's UI verification.
+
+**Sound toggle** (`lib/widgets/sound_toggle_button.dart`, a
+`SoundToggleButton` shared by `HomeScreen`'s AppBar and `GameScreen`'s
+AppBar): reflects `SoundService.instance.enabledNotifier` via
+`ValueListenableBuilder`, calls `.toggle()` (flips the notifier + persists
+to `shared_preferences`) on tap. Deliberately just one shared widget
+rather than separate implementations per screen — kept in
+`lib/widgets/` (not screen-local) specifically so both screens use the
+exact same instance/behavior. Placing it in `GameScreen`'s AppBar (rather
+than inside `_PauseOverlay` itself) was a deliberate choice since the
+AppBar stays visible above the pause overlay anyway, so a second copy
+inside the overlay would just be a redundant duplicate control.

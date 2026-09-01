@@ -4,7 +4,9 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../game/game_engine.dart';
 import '../game/game_mode.dart';
 import '../services/ads_service.dart';
+import '../services/sound_service.dart';
 import '../widgets/board_widget.dart';
+import '../widgets/sound_toggle_button.dart';
 import '../widgets/tray_widget.dart';
 
 class GameScreen extends StatefulWidget {
@@ -45,8 +47,19 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _restart() {
+    SoundService.instance.play(SoundEffect.confirm);
     _interstitialShown = false;
     _engine.start(mode: widget.mode);
+  }
+
+  void _togglePauseWithSound() {
+    SoundService.instance.play(SoundEffect.back);
+    _engine.togglePause();
+  }
+
+  void _exitToMenu() {
+    SoundService.instance.play(SoundEffect.confirm);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -71,7 +84,7 @@ class _GameScreenState extends State<GameScreen> {
       canPop: _engine.gameOver,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        _engine.togglePause();
+        _togglePauseWithSound();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF10161F),
@@ -79,9 +92,10 @@ class _GameScreenState extends State<GameScreen> {
           backgroundColor: const Color(0xFF10161F),
           title: Text(widget.mode == GameMode.survival ? 'Survival' : 'Classic'),
           actions: [
+            const SoundToggleButton(),
             IconButton(
               icon: Icon(_engine.paused ? Icons.play_arrow : Icons.pause),
-              onPressed: _engine.gameOver ? null : _engine.togglePause,
+              onPressed: _engine.gameOver ? null : _togglePauseWithSound,
             ),
           ],
         ),
@@ -149,16 +163,16 @@ class _GameScreenState extends State<GameScreen> {
               ),
               if (_engine.paused && !_engine.gameOver)
                 _PauseOverlay(
-                  onResume: _engine.togglePause,
+                  onResume: _togglePauseWithSound,
                   onRestart: _restart,
-                  onExit: () => Navigator.of(context).pop(),
+                  onExit: _exitToMenu,
                 ),
               if (_engine.gameOver)
                 _GameOverOverlay(
                   score: _engine.score,
                   best: _engine.best,
                   onRestart: _restart,
-                  onExit: () => Navigator.of(context).pop(),
+                  onExit: _exitToMenu,
                 ),
             ],
           ),

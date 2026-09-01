@@ -12,6 +12,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_mobile_ads: ^9.0.0
   shared_preferences: ^2.2.3
+  flame_audio: ^2.12.2
 
 dev_dependencies:
   flutter_test:
@@ -23,6 +24,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/icon.png
+    - assets/audio/sfx_paint.wav
+    - assets/audio/sfx_stick.wav
+    - assets/audio/sfx_explosive.wav
+    - assets/audio/sfx_menu_confirm.wav
+    - assets/audio/sfx_menu_back.wav
 
 flutter_launcher_icons:
   android: true

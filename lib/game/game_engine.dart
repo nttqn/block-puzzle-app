@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../models/piece.dart';
 import '../services/score_service.dart';
+import '../services/sound_service.dart';
 import 'game_mode.dart';
 
 /// The board color a bomb tile is drawn with. Occupies its cell like any
@@ -151,6 +152,7 @@ class GameEngine extends ChangeNotifier {
         originCol + piece.cells.map((c) => c.col).reduce((a, b) => a + b) / piece.cells.length;
     tray[trayIndex] = null;
     HapticFeedback.selectionClick();
+    SoundService.instance.play(SoundEffect.place);
 
     final fullRows = <int>[];
     final fullCols = <int>[];
@@ -180,6 +182,7 @@ class GameEngine extends ChangeNotifier {
       clearingCells = flashed;
       notifyListeners();
       HapticFeedback.mediumImpact();
+      SoundService.instance.play(SoundEffect.clear);
       await Future.delayed(const Duration(milliseconds: 160));
 
       for (final r in fullRows) {

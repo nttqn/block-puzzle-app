@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../game/game_mode.dart';
 import '../services/score_service.dart';
+import '../services/sound_service.dart';
 import '../widgets/piece_view.dart';
+import '../widgets/sound_toggle_button.dart';
 import '../models/piece.dart';
 import 'game_screen.dart';
 
@@ -30,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _play(GameMode mode) async {
+    SoundService.instance.play(SoundEffect.confirm);
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameScreen(mode: mode)));
     _loadBests();
   }
@@ -38,6 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF10161F),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF10161F),
+        elevation: 0,
+        actions: const [SoundToggleButton()],
+      ),
       body: SafeArea(
         child: Center(
           child: Column(
