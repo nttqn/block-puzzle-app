@@ -87,11 +87,15 @@ real trial-and-error, worth understanding before touching either file:
   (`onAcceptWithDetails`) use this same conversion, so whatever the
   feedback visually overlaps is exactly what gets validated/placed — no
   separate hit-testing math to keep in sync.
-- Each tray piece drags via a plain `Draggable` (default
-  `childDragAnchorStrategy`, so the finger stays at the same *relative*
-  position within the feedback even though the feedback renders larger
-  than the tray thumbnail — a deliberate "the piece grows on pickup" genre
-  convention, not a bug). The piece is lifted above the finger for
+- Each tray piece drags via a plain `Draggable` with
+  `dragAnchorStrategy: pointerDragAnchorStrategy` (**not** the default
+  `childDragAnchorStrategy` — see the fourth bug below for why that default
+  was actually the problem). This anchors the feedback's own top-left
+  corner exactly at the pointer, regardless of where within the piece the
+  user grabbed it — the "piece grows on pickup" size jump (feedback renders
+  at board scale, bigger than the tray thumbnail) is still a deliberate
+  genre convention, just no longer combined with a grab-point-dependent
+  offset. The piece is lifted above the finger for
   visibility using a `Transform.translate` *inside* the `feedback` widget
   itself — **not** `Draggable.feedbackOffset`. This distinction matters a
   lot: `feedbackOffset` shifts the actual tracked/reported position
@@ -159,6 +163,33 @@ real trial-and-error, worth understanding before touching either file:
   reintroduce `feedbackOffset` on this widget** — if a future change wants
   the piece to visually follow the finger less directly (e.g. some drift or
   spring effect), implement it as paint-only, the same way.
+- **A fourth bug, reported by a user as "I'm dragging the piece over 5
+  clearly-empty cells and no preview shows at all"**: on a *tight-fit* gap
+  — empty space exactly the size of the piece, zero margin for error — the
+  default `childDragAnchorStrategy` preserves the pointer's fractional
+  position *within the grabbed child* (the tray thumbnail) when placing the
+  feedback, so the feedback's tracked top-left ends up offset from the
+  pointer by up to half a cell in either axis, by an amount that depends on
+  *exactly where within the piece the user happened to grab it* — grab
+  near an edge and the offset is small; grab near the center and it can be
+  large. That's normally harmless (there's usually slack around a target
+  cell), but on a gap with zero slack, half a cell of grab-point-dependent
+  offset is enough to compute the wrong origin and make a placement that
+  genuinely fits register as invalid. Confirmed via a `flutter_test`
+  gesture-driven reproduction (`test/bottom_row_drag_test.dart`) *before*
+  jumping to a fix: the same target position showed 5 invalid (red)
+  preview cells when grabbed one way and 5 valid (green) cells when grabbed
+  another, with the drop math otherwise unchanged — proving the anchor
+  strategy, not the cell/coordinate math, was the variable. Fixed by
+  switching to `dragAnchorStrategy: pointerDragAnchorStrategy` (see above),
+  which anchors the feedback's top-left exactly at the pointer regardless
+  of grab point, making the drop cell a fixed, grab-point-independent
+  function of pointer position alone. **If a "can't place here even though
+  it clearly fits" report comes up again, suspect the anchor strategy
+  before the coordinate math** — the math has now been proven correct
+  (engine unit tests) and provably deterministic (this bug) three separate
+  times; the anchor/offset layer is where every real bug in this feature
+  has actually lived.
 - Verified end-to-end via a local Playwright-driven
   `flutter build web --release` + static-server session (drag from tray →
   live preview tint → drop → placement → score update; pause/resume

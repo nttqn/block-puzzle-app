@@ -61,17 +61,25 @@ class TrayWidget extends StatelessWidget {
 
     return Draggable<TrayDragData>(
       data: TrayDragData(piece: piece, trayIndex: index),
-      // feedbackOffset is deliberately left at zero: BoardWidget derives
-      // the drop cell from this feedback's tracked position (see its doc
-      // comment), so any nonzero feedbackOffset here would shift *where a
-      // piece actually lands* away from where it's drawn — requiring the
-      // finger to hover below the visual target to place a piece near the
-      // top rows, badly enough to make the very top row unreachable
-      // without the board running out of room below it. The lift-above-
-      // the-finger visual is instead done with a plain Transform inside
-      // the feedback itself, which only shifts paint, not the tracked
-      // layout position — so the drop math stays a direct 1:1 mapping of
-      // finger position to board cell, and only the drawing moves.
+      // Anchors the feedback's own top-left corner exactly at the pointer,
+      // regardless of *where within the piece* the user grabbed it — unlike
+      // the default childDragAnchorStrategy, which preserves the grabbed
+      // point's fractional position and therefore introduces a grab-point-
+      // dependent offset of up to half a cell either way. That was enough,
+      // on a tight-fit gap exactly the piece's size (zero margin for
+      // error), to tip the computed drop cell over by one and make a
+      // genuinely-fitting placement register as invalid. With a fixed
+      // anchor, the drop math (in BoardWidget, which reads this feedback's
+      // tracked position) becomes a direct, grab-point-independent mapping
+      // of pointer position to board cell.
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      // feedbackOffset is deliberately left at zero for the same reason:
+      // BoardWidget derives the drop cell from this feedback's tracked
+      // position (see its doc comment), so any nonzero feedbackOffset here
+      // would shift *where a piece actually lands* away from where it's
+      // drawn. The lift-above-the-finger visual is instead done with a
+      // plain Transform inside the feedback itself, which only shifts
+      // paint, not the tracked layout position.
       feedback: Transform.translate(
         offset: Offset(0, -boardCellSize * 1.5),
         child: PieceView(piece: piece, cellSize: boardCellSize),
