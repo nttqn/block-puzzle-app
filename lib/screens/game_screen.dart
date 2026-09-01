@@ -131,7 +131,7 @@ class _GameScreenState extends State<GameScreen> {
                             _BombTimerChip(
                               secondsLeft: _engine.bomb!.secondsLeft,
                             ),
-                          _ScoreTile(label: 'BEST', value: _engine.best),
+                          _ScoreTile(label: 'BEST', value: _engine.best, highlight: true),
                         ],
                       ),
                     ),
@@ -209,28 +209,30 @@ class _GameScreenState extends State<GameScreen> {
 class _ScoreTile extends StatelessWidget {
   final String label;
   final int value;
+  final bool highlight;
 
-  const _ScoreTile({required this.label, required this.value});
+  const _ScoreTile({required this.label, required this.value, this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
+    final labelColor = highlight ? Colors.amber : Colors.white54;
+    final valueColor = highlight ? Colors.amberAccent : Colors.white;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 12,
-            letterSpacing: 1.5,
-          ),
+          style: TextStyle(color: labelColor, fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold),
         ),
         Text(
           '$value',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: valueColor,
             fontSize: 24,
             fontWeight: FontWeight.bold,
+            shadows: highlight
+                ? [Shadow(color: Colors.amber.withValues(alpha: 0.6), blurRadius: 8)]
+                : null,
           ),
         ),
       ],
