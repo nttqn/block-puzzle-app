@@ -20,15 +20,19 @@ flutter build apk --release    # debug-signed test APK
 
 ## Before publishing to the Play Store
 
-1. **AdMob**: `lib/services/ads_service.dart` currently uses Google's public
-   TEST ad unit IDs. Create a real AdMob app + banner/interstitial ad units
-   and swap `bannerAdUnitId`/`interstitialAdUnitId`. Also set the
-   `ADMOB_APP_ID` GitHub secret (the App ID is a separate value from the ad
-   unit IDs — see AdMob console's app settings).
-2. **Release signing**: generate a keystore and set the `KEYSTORE_BASE64`,
-   `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` GitHub secrets — see
-   `CLAUDE.md` for the exact CI wiring. Without these the build stays
-   debug-signed (fine for sideloading, rejected by Play Console).
-3. **App icon**: replace `assets/icon/icon.png` (512x512) — nothing else
-   needs editing, `flutter_launcher_icons` regenerates every mipmap size in
-   CI.
+1. ~~**AdMob**~~ — done. Real banner/interstitial ad unit IDs are set in
+   `lib/services/ads_service.dart`; the `ADMOB_APP_ID` GitHub secret (a
+   separate value from the ad unit IDs) is also set.
+2. ~~**Release signing**~~ — done. The `KEYSTORE_BASE64`,
+   `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` GitHub secrets are set;
+   CI builds a real Play-Store-signable APK/AAB. See CLAUDE.md's
+   "Leaderboard" section for this keystore's SHA-1, needed to register the
+   Play Games OAuth client.
+3. **App icon**: done — `assets/icon/icon.png` is the real launcher icon
+   art; `flutter_launcher_icons` regenerates every mipmap size in CI.
+4. **Privacy policy**: drafted at `docs/privacy.html` (covers the local
+   score/settings storage, Play Games Services sign-in, and AdMob). Enable
+   GitHub Pages for this repo (Settings → Pages → Source: "Deploy from a
+   branch" → branch `main`, folder `/docs`) to get a public URL — Play
+   Console requires one before a listing can go live. Once enabled, it's
+   `https://nttqn.github.io/block-puzzle-app/privacy.html`.
