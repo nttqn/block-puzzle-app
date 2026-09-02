@@ -6,10 +6,13 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 A Flutter Android block-puzzle game (`Block Puzzle Plus`), English UI, with AdMob
 banner + interstitial ads wired in, intended for Google Play. Play Games
-Services leaderboards (one per game mode) are wired in code — see "Leaderboard"
-below — but **not yet functional**: they need a Play Console project, two
-real leaderboard IDs, and a release keystore that don't exist for this
-project yet.
+Services leaderboards (one per game mode, real leaderboard IDs from an
+existing Play Console project) are wired in code — see "Leaderboard"
+below — but **still unverified end-to-end**: Play Games ties sign-in to
+the app's signing certificate, and this project has only ever built
+debug-signed test APKs, so a real release keystore + the
+`PLAY_GAMES_APP_ID` GitHub secret still need to be set before a build can
+actually sign in.
 The Dart package name (`block_puzzle`, i.e. every `package:block_puzzle/...`
 import) and the Android application ID (`com.trungsmail.block_puzzle`) were
 deliberately **not** renamed to match — those are internal identifiers, not
@@ -525,44 +528,76 @@ Games Services, one leaderboard per `GameMode` (Classic/Survival aren't
 comparable, same reason `ScoreService` tracks "best" per mode). Same
 `games_services` package and defensive pattern as
 [[project_number99_app]] (its `LeaderboardService` was the reference
-implementation copied here): every call wrapped in try/catch, an
-`_isSupported` check (Android-only — this project has no iOS target) and
-an `_isConfigured(mode)` check (the two leaderboard IDs are still
-`REPLACE_WITH_..._LEADERBOARD_ID` placeholders) both short-circuit to a
-safe no-op/`false` before ever touching a platform channel. `GameEngine`
-calls `LeaderboardService.signIn()` unawaited from `start()` and
-`LeaderboardService.submitScore(mode, score)` unawaited at both
-game-over paths (right next to the existing `ScoreService.saveBest` calls)
-— same "call side-effect services directly from the engine" precedent
-already established for `SoundService`/`HapticFeedback`. `HomeScreen` also
-calls `signIn()` once at `initState` (belt-and-suspenders, same dual-call-
-site pattern number99 used) and shows a small trophy `IconButton` next to
-each mode's "Best: N" button that calls `showLeaderboard(mode)`, falling
-back to a `SnackBar` ("Leaderboard not available yet.") when it returns
-`false` — covered by a widget test tapping it and asserting that message,
-which passes deterministically regardless of test-environment platform
-detection quirks since the placeholder-ID check alone already forces
-`false` before any platform-specific branch is reached. **This cannot
-work yet** — three separate real-world prerequisites are still missing,
-none of which code alone can satisfy:
-1. A Google Play Console project for this app with Play Games Services
-   enabled.
-2. Two real leaderboard IDs created there (Play Console > Play Games
-   Services > Leaderboards, one per mode) to replace the two placeholders
-   in `leaderboard_service.dart`.
-3. A real release keystore (see [[feedback_release_signing_setup]]) whose
-   SHA-1 is registered with the Play Games OAuth client — Play Games ties
-   sign-in to the app's signing certificate, so this can never be verified
-   against the debug-signed builds this project has used so far, and the
-   `PLAY_GAMES_APP_ID` GitHub secret (see `build-apk.yml`'s manifest patch
-   step, mirroring the `ADMOB_APP_ID` pattern) also needs the real Play
-   Games Services App ID once that project exists.
-Until all three exist, every leaderboard call safely no-ops — the game
-stays fully playable, "Best: N" per mode keeps working locally via
-`ScoreService` exactly as before, and the trophy button just shows the
-fallback message. Do not treat "the button doesn't do anything real yet"
-as a bug to fix in code — it's a known, deliberate state pending the
-user's own Play Console setup.
+implementation copied here): every call wrapped in try/catch, and an
+`_isSupported` check (Android-only — this project has no iOS target) that
+short-circuits to a safe no-op/`false` before ever touching a platform
+channel. Both leaderboard IDs are now real (`CgkIje_cuZ8REAIQAQ` for
+Classic, `CgkIje_cuZ8REAIQAg` for Survival — a Play Console project for
+this app now exists). `GameScreen.initState()` calls
+`LeaderboardService.signIn()` unawaited (**not** `GameEngine.start()` —
+see the timer-leak note below for why it moved); `GameEngine` calls
+`LeaderboardService.submitScore(mode, score)` unawaited at both game-over
+paths (right next to the existing `ScoreService.saveBest` calls) — same
+"call side-effect services directly from the engine" precedent already
+established for `SoundService`/`HapticFeedback`. `HomeScreen` shows a
+small trophy `IconButton` next to each mode's "Best: N" button that calls
+`showLeaderboard(mode)`, falling back to a `SnackBar` ("Leaderboard not
+available yet.") when it returns `false`.
+- **Every platform call is wrapped in `.timeout(Duration(seconds: 5))`.**
+  Discovered why the hard way: with a placeholder (unconfigured) ID,
+  `showLeaderboard` short-circuited before ever calling
+  `GameAuth.signIn()`, so a real platform-channel call was never actually
+  exercised — the moment real IDs went in, a `testWidgets` test tapping
+  the trophy button started failing with "Found 0 widgets" for the
+  fallback SnackBar. A throwaway probe test (`await GameAuth.signIn()`
+  inside a bare `testWidgets`, no timeout) confirmed the call hangs
+  **forever** under `flutter_test` rather than throwing
+  `MissingPluginException` — with no native handler registered, the
+  outbound message just sits in Flutter's channel buffer waiting for a
+  handler that never attaches, instead of being rejected the way an
+  unregistered channel is commonly assumed to behave. This is the exact
+  same failure class as the `flame_audio`/`AudioPool` hang documented
+  under "Sound" below (and originally in
+  [[project_number_master_app]]) — an unguarded platform-channel Future
+  that can hang its caller forever. Fixed the same way: wrap every call in
+  `.timeout(...)`. Since `Future.timeout` uses a real `Timer` internally,
+  `flutter_test`'s fake clock resolves it deterministically via
+  `tester.pump(Duration(seconds: 6))` — no real wall-clock wait needed,
+  same mechanism already used for the bomb-countdown `Timer.periodic` test.
+- **Timer-leak lesson, why `signIn()` moved out of `GameEngine.start()`.**
+  `flutter_test`'s `testWidgets` fails a test outright ("A Timer is still
+  pending even after the widget tree was disposed") if any real `Timer` —
+  even one from a totally unrelated fire-and-forget side effect — is still
+  running when the test ends. The bomb-timeout `testWidgets` test in
+  `game_engine_test.dart` calls `engine.start()` directly (not through
+  `GameScreen`), so a `signIn()` call fired from inside `start()` left its
+  5s timeout `Timer` pending after that test's own ~1.1s pump, breaking a
+  previously-passing test. Moved the `signIn()` call to
+  `GameScreen.initState()` instead (mirroring number99's actual call site,
+  not the engine) so `GameEngine`'s own tests — which construct/start
+  engines directly, bypassing the screen — no longer trigger it at all.
+  The *other* real trigger, `submitScore()` firing from the engine's own
+  game-over paths, couldn't be moved the same way (it's intrinsic to
+  `placePiece`/`_tickBomb`), so that same bomb-timeout test instead pumps
+  an extra `Duration(seconds: 6)` after asserting `gameOver` — see its
+  comment for why. **Any new `testWidgets` test that reaches a real
+  game-over (or that mounts `GameScreen`) must budget for this — either
+  pump ≥6s past that point, or the test will intermittently/consistently
+  fail on a leftover Timer that has nothing to do with what the test is
+  actually checking.**
+
+This is functionally live now (real IDs, real Play Console project) but
+still **cannot be verified end-to-end** without a real release-signed
+build: Play Games ties sign-in to the app's signing certificate, and this
+project has only ever built debug-signed test APKs so far (see
+[[feedback_release_signing_setup]]). The `PLAY_GAMES_APP_ID` GitHub secret
+(see `build-apk.yml`'s manifest patch step, mirroring the `ADMOB_APP_ID`
+pattern) also still needs to be set from the Play Console project's Play
+Games Services App ID before a CI-built APK can actually sign in. Until
+both of those happen, every leaderboard call still safely times out/no-ops
+— the game stays fully playable, "Best: N" per mode keeps working locally
+via `ScoreService` exactly as before, and the trophy button shows the
+fallback message.
 
 **Ads (`lib/services/ads_service.dart`)**: same singleton pattern as the
 other games in this series, currently on Google's public TEST ad unit IDs

@@ -215,6 +215,17 @@ void main() {
       await tester.pump(const Duration(seconds: 1, milliseconds: 100));
 
       expect(engine.gameOver, isTrue);
+
+      // Game over fires an unawaited LeaderboardService.submitScore, which
+      // wraps its platform-channel call in a 5s .timeout() (see
+      // leaderboard_service.dart's class doc — there's no native Play Games
+      // handler under flutter_test, so the raw call would otherwise hang
+      // forever rather than throwing). Pump past that so its Timer fires
+      // and is fully consumed before the test ends — flutter_test's
+      // testWidgets fails a test that leaves a real Timer still pending at
+      // teardown, even one from an unrelated fire-and-forget side effect.
+      await tester.pump(const Duration(seconds: 6));
+
       engine.dispose();
     });
   });

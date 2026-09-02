@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../game/game_mode.dart';
@@ -27,7 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadBests();
-    unawaited(LeaderboardService.signIn());
   }
 
   Future<void> _loadBests() async {

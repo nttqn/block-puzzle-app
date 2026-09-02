@@ -83,7 +83,6 @@ class GameEngine extends ChangeNotifier {
     bomb = null;
     tray = List<PieceInstance?>.filled(trayCount, null);
     _refillTray();
-    unawaited(LeaderboardService.signIn());
 
     _bombTimer?.cancel();
     _bombTimer = null;
