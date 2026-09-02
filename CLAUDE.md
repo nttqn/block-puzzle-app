@@ -600,9 +600,13 @@ via `ScoreService` exactly as before, and the trophy button shows the
 fallback message.
 
 **Ads (`lib/services/ads_service.dart`)**: same singleton pattern as the
-other games in this series, currently on Google's public TEST ad unit IDs
-(never swapped to real ones for this project yet). Interstitial shows
-roughly every other finished game, not after every one.
+other games in this series. Both ad unit IDs are now real (this project's
+own AdMob account, publisher `9078637596840810`) — the `ADMOB_APP_ID`
+GitHub secret is still a separate value (the manifest-level Application
+ID, patched in by `build-apk.yml`, not either ad unit ID) and must also be
+set from the same AdMob account before a CI build serves real ads instead
+of Google's public TEST App ID. Interstitial shows roughly every other
+finished game, not after every one.
 
 **Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
 same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`

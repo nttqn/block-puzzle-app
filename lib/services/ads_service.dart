@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Wraps AdMob banner + interstitial ads behind Google's official TEST ad
-/// unit IDs. Swap these for real AdMob IDs before publishing (and set the
-/// ADMOB_APP_ID GitHub secret — see README.md).
+/// Wraps AdMob banner + interstitial ads, both real unit IDs from this
+/// project's own AdMob account. The ADMOB_APP_ID GitHub secret (see
+/// README.md) is a separate value — the manifest-level Application ID,
+/// not either ad unit ID here.
 ///
 /// `google_mobile_ads` only supports Android/iOS, so every entry point here
 /// is a no-op on web/desktop — that keeps `flutter run -d chrome` usable for
@@ -12,8 +13,8 @@ class AdsService {
   AdsService._();
   static final AdsService instance = AdsService._();
 
-  static const String bannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
-  static const String interstitialAdUnitId = 'ca-app-pub-3940256099942544/1033173712';
+  static const String bannerAdUnitId = 'ca-app-pub-9078637596840810/7978938616';
+  static const String interstitialAdUnitId = 'ca-app-pub-9078637596840810/4039693603';
 
   InterstitialAd? _interstitialAd;
   int _gamesSinceInterstitial = 0;
