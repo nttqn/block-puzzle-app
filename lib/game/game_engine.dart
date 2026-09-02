@@ -60,6 +60,16 @@ class GameEngine extends ChangeNotifier {
   ExplosionEvent? explosion;
   int explosionSeq = 0;
 
+  /// Fires only when a single placement clears 2+ lines at once (a "multi
+  /// clear") — distinct from [combo], which instead tracks a streak of
+  /// consecutive clearing *placements*. Prompts a short-lived "COMBO xN"
+  /// banner in the UI. [comboBannerSeq] is the same "new event" counter
+  /// pattern as [popupSeq]/[explosionSeq], since the multiplier value alone
+  /// can't tell a fresh multi-clear apart from a stale read on an unrelated
+  /// rebuild.
+  int? comboBannerMultiplier;
+  int comboBannerSeq = 0;
+
   Future<void> start({GameMode mode = GameMode.classic}) async {
     this.mode = mode;
     best = await ScoreService.instance.loadBest(mode);
@@ -215,12 +225,22 @@ class GameEngine extends ChangeNotifier {
 
       combo++;
       final totalLines = fullRows.length + fullCols.length;
-      var linePoints = totalLines * 10;
-      if (totalLines > 1) linePoints += (totalLines - 1) * 10;
+      // Clearing 2+ lines in one placement earns a flat xN multiplier
+      // (N = lines cleared) on top of the per-line points, on top of (not
+      // instead of) comboMultiplier below — that one instead rewards
+      // clearing on consecutive placements. This is a separate bonus from a
+      // separate cause, so the two stack rather than compete.
+      final multiClearMultiplier = totalLines >= 2 ? totalLines : 1;
+      final linePoints = totalLines * 10;
       final comboMultiplier = 1 + (combo - 1) * 0.5;
-      final bonus = (linePoints * comboMultiplier).round();
+      final bonus = (linePoints * multiClearMultiplier * comboMultiplier).round();
       score += bonus;
       totalGainedThisMove += bonus;
+
+      if (multiClearMultiplier >= 2) {
+        comboBannerMultiplier = multiClearMultiplier;
+        comboBannerSeq++;
+      }
     } else {
       combo = 0;
     }

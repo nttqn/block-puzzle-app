@@ -126,4 +126,44 @@ void main() {
     final particlesAfter = tester.widgetList(find.byType(Opacity)).length - particlesBefore;
     expect(particlesAfter, lessThan(expectedParticles));
   });
+
+  testWidgets('clearing 2 lines at once shows a COMBO x2 banner that then disappears', (tester) async {
+    final engine = GameEngine();
+    for (var c = 1; c < GameEngine.boardSize; c++) {
+      engine.board[0][c] = kPieceColors.first;
+    }
+    for (var r = 1; r < GameEngine.boardSize; r++) {
+      engine.board[r][0] = kPieceColors.first;
+    }
+    engine.tray[0] = _singleCell();
+
+    await tester.pumpWidget(_harness(engine));
+
+    unawaited(engine.placePiece(0, 0, 0));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+
+    expect(find.text('COMBO x2!'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1050));
+    expect(find.text('COMBO x2!'), findsNothing);
+  });
+
+  testWidgets('a single-line clear does not show a combo banner', (tester) async {
+    final engine = GameEngine();
+    for (var c = 0; c < GameEngine.boardSize - 1; c++) {
+      engine.board[0][c] = kPieceColors.first;
+    }
+    engine.tray[0] = _singleCell();
+
+    await tester.pumpWidget(_harness(engine));
+
+    unawaited(engine.placePiece(0, 0, GameEngine.boardSize - 1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+
+    expect(find.textContaining('COMBO'), findsNothing);
+  });
 }

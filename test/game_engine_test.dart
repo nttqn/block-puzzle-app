@@ -80,6 +80,31 @@ void main() {
       await engine.placePiece(0, 0, 0);
       expect(engine.combo, 0);
     });
+
+    test('clearing 2 lines at once applies a x2 multi-clear bonus and fires the combo banner', () async {
+      final engine = GameEngine();
+      // Fill row 0 and column 0 entirely except their shared corner (0,0),
+      // so a single-cell placement there completes both at once.
+      for (var c = 1; c < GameEngine.boardSize; c++) {
+        engine.board[0][c] = kPieceColors.first;
+      }
+      for (var r = 1; r < GameEngine.boardSize; r++) {
+        engine.board[r][0] = kPieceColors.first;
+      }
+      engine.tray[0] = _singleCell();
+      final scoreBefore = engine.score;
+      final bannerSeqBefore = engine.comboBannerSeq;
+
+      await engine.placePiece(0, 0, 0);
+
+      expect(engine.board[0].every((cell) => cell == null), isTrue);
+      expect(engine.board.every((row) => row[0] == null), isTrue);
+      // 1 point for the placed cell, plus (2 lines * 10 base points) * x2
+      // multi-clear multiplier = 40.
+      expect(engine.score, scoreBefore + 1 + 40);
+      expect(engine.comboBannerMultiplier, 2);
+      expect(engine.comboBannerSeq, bannerSeqBefore + 1);
+    });
   });
 
   group('game over detection', () {

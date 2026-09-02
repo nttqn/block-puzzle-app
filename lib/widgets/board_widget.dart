@@ -35,11 +35,15 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
   int _lastExplosionSeq = 0;
   final List<_ActiveExplosion> _activeExplosions = [];
 
+  int _lastComboBannerSeq = 0;
+  final List<_ActiveComboBanner> _activeComboBanners = [];
+
   @override
   void initState() {
     super.initState();
     _lastPopupSeq = widget.engine.popupSeq;
     _lastExplosionSeq = widget.engine.explosionSeq;
+    _lastComboBannerSeq = widget.engine.comboBannerSeq;
   }
 
   @override
@@ -54,6 +58,11 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
     if (widget.engine.explosionSeq != _lastExplosionSeq && explosion != null) {
       _lastExplosionSeq = widget.engine.explosionSeq;
       _addExplosion(explosion);
+    }
+    final comboMultiplier = widget.engine.comboBannerMultiplier;
+    if (widget.engine.comboBannerSeq != _lastComboBannerSeq && comboMultiplier != null) {
+      _lastComboBannerSeq = widget.engine.comboBannerSeq;
+      _addComboBanner(comboMultiplier);
     }
   }
 
@@ -85,12 +94,29 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
     controller.forward();
   }
 
+  void _addComboBanner(int multiplier) {
+    final controller = AnimationController(duration: const Duration(milliseconds: 1000), vsync: this);
+    final entry = _ActiveComboBanner(multiplier: multiplier, controller: controller);
+    controller.addListener(() => setState(() {}));
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() => _activeComboBanners.remove(entry));
+        controller.dispose();
+      }
+    });
+    setState(() => _activeComboBanners.add(entry));
+    controller.forward();
+  }
+
   @override
   void dispose() {
     for (final entry in _activePopups) {
       entry.controller.dispose();
     }
     for (final entry in _activeExplosions) {
+      entry.controller.dispose();
+    }
+    for (final entry in _activeComboBanners) {
       entry.controller.dispose();
     }
     super.dispose();
@@ -186,6 +212,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                         ),
                   for (final entry in _activeExplosions) ..._buildExplosion(entry, cellSize),
                   for (final entry in _activePopups) _buildPopup(entry, cellSize),
+                  for (final entry in _activeComboBanners) _buildComboBanner(entry, cellSize),
                 ],
               ),
             );
@@ -221,6 +248,51 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                 Shadow(color: Colors.black, blurRadius: 6),
                 Shadow(color: Colors.black, blurRadius: 2, offset: Offset(0, 1)),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A big "COMBO xN!" banner for a multi-line clear — punches in with a
+  /// slight overshoot (`easeOutBack`) over the first third of the
+  /// animation, holds, then fades over the last third. Centered on the
+  /// board horizontally and pinned above its vertical middle (rather than
+  /// following the clear's centroid like `_buildPopup`) since a multi-line
+  /// clear can span rows and columns at once with no single natural anchor
+  /// point, and a fixed "title card" position reads more like a genre-
+  /// standard callout than a per-cell effect anyway.
+  Widget _buildComboBanner(_ActiveComboBanner entry, double cellSize) {
+    final t = entry.controller.value;
+    final scale = t < 0.35 ? Curves.easeOutBack.transform((t / 0.35).clamp(0.0, 1.0)) : 1.0;
+    final opacity = t < 0.7
+        ? 1.0
+        : (1.0 - Curves.easeIn.transform(((t - 0.7) / 0.3).clamp(0.0, 1.0))).clamp(0.0, 1.0);
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: cellSize * GameEngine.boardSize * 0.32,
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: opacity,
+          child: Transform.scale(
+            scale: scale,
+            child: Center(
+              child: Text(
+                'COMBO x${entry.multiplier}!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: cellSize * 1.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  shadows: const [
+                    Shadow(color: Colors.black, blurRadius: 10),
+                    Shadow(color: Colors.deepOrange, blurRadius: 20),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -315,4 +387,10 @@ class _ActiveExplosion {
   final ExplosionEvent explosion;
   final AnimationController controller;
   const _ActiveExplosion({required this.explosion, required this.controller});
+}
+
+class _ActiveComboBanner {
+  final int multiplier;
+  final AnimationController controller;
+  const _ActiveComboBanner({required this.multiplier, required this.controller});
 }

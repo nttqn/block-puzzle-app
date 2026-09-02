@@ -377,10 +377,42 @@ real trial-and-error, worth understanding before touching either file:
   `bottom_row_drag_test.dart` or `tray_overflow_test.dart`) for anything
   that needs to click/drag a specific widget.
 
-**Scoring**: 1 point per placed cell; a line clear scores
-`10*linesCleared + 10*(linesCleared-1)` (multi-clear bonus) multiplied by
-`1 + (combo-1)*0.5` where `combo` is the consecutive-clearing-placement
-streak. **Every** successful placement (not just ones that clear a line —
+**Scoring**: 1 point per placed cell; a line clear scores `10*linesCleared`
+multiplied by a **multi-clear multiplier** (`linesCleared` itself, so 1x for
+a single line, 2x for clearing 2 lines in the same placement, 3x for 3, and
+so on — added on user request so simultaneous multi-line clears feel
+meaningfully bigger than a flat per-line bonus) multiplied again by
+`1 + (combo-1)*0.5` where `combo` is a *different*, unrelated bonus: the
+consecutive-clearing-*placement* streak (increments across separate turns,
+not simultaneous lines within one turn). These two multipliers stack
+because they reward two different things — clearing several lines at once
+vs. clearing on back-to-back turns — and nothing stops both being true at
+once. Whenever the multi-clear multiplier is ≥2, `GameEngine` also sets
+`comboBannerMultiplier` and bumps `comboBannerSeq` (same "new event"
+pattern as `popupSeq`/`explosionSeq` below), which `BoardWidget` renders as
+a punchy "COMBO xN!" banner — centered on the board rather than following
+any per-cell centroid, since a simultaneous row+column clear has no single
+natural anchor point. Deliberately named independently in code
+(`multiClearMultiplier`/`comboBannerMultiplier`, not reusing `combo`) to
+keep the two bonuses distinct in the source even though the UI banner text
+says "COMBO" for both, matching genre convention. **Animation-curve gotcha
+hit while adding this banner**: `Curves.easeIn.transform((t - 0.7) / 0.3)`
+threw `parametric value ... is outside of [0, 1] range` under `flutter
+test` even though the *result* was always clamped afterward — an
+`AnimationController`'s value can land a hair above `1.0`
+(`1.0000000000000002`-style float error from the `/0.3` division) right at
+the animation's natural end, and `Curve.transform` asserts on its **input**
+being in range before any clamping of the output ever runs. Fix: clamp the
+argument passed *into* `transform` (`.clamp(0.0, 1.0)` on the fraction
+itself), not just the final opacity/scale value — the existing
+`_buildPopup`/`_buildExplosion` curves happen to avoid this by construction
+(their fractions are produced by exact multiplication, e.g. `(t-0.5)*2`,
+which can't overshoot 1.0 the way a `/0.3` division can), so this bug was
+specific to the new curve's math, not a pattern the older effects needed to
+guard against — but any *new* animation curve doing non-exact division to
+normalize `t` into a sub-range should clamp the input defensively from the
+start. **Every** successful
+placement (not just ones that clear a line —
 this was a deliberate correction after an initial line-clear-only version
 looked to a user like "the popup is appearing on every block for no
 reason," when actually they wanted exactly that) sets `GameEngine.popup` (a
