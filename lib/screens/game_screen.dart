@@ -96,17 +96,32 @@ class _GameScreenState extends State<GameScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF10161F),
         extendBodyBehindAppBar: true,
+        // A real "RenderFlex overflowed" was hit here on a narrow window:
+        // AppBar's title + 2 actions (each a default 48x48-tap-target
+        // IconButton) don't leave enough room at small widths, and unlike
+        // a plain Row, AppBar's internal NavigationToolbar layout can
+        // squeeze the actions area down arbitrarily far (observed:
+        // BoxConstraints down to ~1px) rather than growing the AppBar or
+        // wrapping — so this needs the actions themselves to have a
+        // smaller natural footprint, not a wrapper fix at this call site.
+        // titleSpacing: 0 reclaims the default gap next to the (absent)
+        // leading widget; the title ellipsizes rather than fighting the
+        // actions for space if it's still tight.
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
+          titleSpacing: 0,
           title: Text(
             widget.mode == GameMode.survival ? 'Survival' : 'Classic',
+            overflow: TextOverflow.ellipsis,
           ),
           actions: [
             const SoundToggleButton(),
             IconButton(
               icon: Icon(_engine.paused ? Icons.play_arrow : Icons.pause),
               onPressed: _engine.gameOver ? null : _togglePauseWithSound,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),

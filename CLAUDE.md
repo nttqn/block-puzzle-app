@@ -661,6 +661,42 @@ than inside `_PauseOverlay` itself) was a deliberate choice since the
 AppBar stays visible above the pause overlay anyway, so a second copy
 inside the overlay would just be a redundant duplicate control.
 
+**GameScreen AppBar overflow (hardened, not conclusively reproduced,
+2026-09-02)**: a live Chrome session threw a real `RenderFlex overflowed
+by 79 pixels` in this AppBar's trailing actions slot
+(`game_screen.dart:99`), with the actions `Row`'s constraints reported as
+`BoxConstraints(0.0<=w<=1.0, 0.0<=h<=1.0)` — an almost perfectly
+zero-width box. Investigated properly rather than guessing: built an
+isolated width-sweep test harness (title + `SoundToggleButton` + pause
+`IconButton`, pushed via a real `Navigator.push` so the auto leading
+back-button is present, matching the real screen) and swept widths from
+400px down to 140px. **The overflow did not reproduce at any width down
+to 140px, for either the original config or the hardened one below** —
+whatever produced a trailing constraint of ~1px live almost certainly
+wasn't a *stable* narrow layout (which the tray-overflow bug in
+`tray_widget.dart` was, and which a static width sweep like this reliably
+catches), but something more like a *transient* one-frame layout pass
+during an active browser window resize — Flutter web can genuinely see a
+degenerate near-zero intermediate constraint mid-resize before the next
+frame settles to the real size, which a `pumpWidget`-based test can't
+easily force since it doesn't model a resize *in progress*, only discrete
+before/after sizes. Given that, no regression test was added for this one
+— a test that can't actually fail on the old code isn't a real regression
+guard, and inventing narrower and narrower widths just to make an
+assertion pass would have been theater, not verification.
+Applied a real, low-risk hardening anyway since it's a pure improvement
+regardless of root cause: `SoundToggleButton` and the pause `IconButton`
+now use `padding: EdgeInsets.zero, constraints: const BoxConstraints()`
+(dropping their default 48x48 minimum tap target down to just the icon's
+own size — the same pattern already used for the home screen's trophy
+leaderboard button), and the AppBar sets `titleSpacing: 0` with the title
+`Text` given `overflow: TextOverflow.ellipsis`. **If this specific error
+reappears with a *reproducible* width** (i.e. it happens again at a
+stable window size you can note down), that's the signal this
+investigation's "probably transient" conclusion was wrong — revisit with
+that exact width in a test like the sweep described above, rather than
+assuming it's still just a resize artifact.
+
 **Background art** (`lib/widgets/app_background.dart`, an `AppBackground`
 shared by both `HomeScreen` and `GameScreen`): a full-bleed
 `Image.asset('assets/backgrounds/bg.png', fit: BoxFit.cover)` with a

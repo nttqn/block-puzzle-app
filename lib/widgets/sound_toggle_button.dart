@@ -16,6 +16,12 @@ class SoundToggleButton extends StatelessWidget {
         return IconButton(
           icon: Icon(enabled ? Icons.volume_up : Icons.volume_off),
           onPressed: () => SoundService.instance.toggle(),
+          // Default IconButton padding reserves a 48x48 tap target, which
+          // on a narrow window adds up fast alongside other AppBar actions
+          // (a real "RenderFlex overflowed" was hit in the game screen's
+          // AppBar — see game_screen.dart's AppBar for the full writeup).
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
         );
       },
     );
