@@ -92,33 +92,67 @@ Padding for board-cell separation — `PieceView`'s own `BlockCell` calls
 (`cellSize * 0.06`) and are unaffected; that gap is between cells of the
 *same* piece and was never doubled up this way.
 
-**App icon** (`assets/icon/icon.png`): a user-supplied wordmark
-(`block-puzzle-plus-logo.png`, kept at the repo root as a source reference,
-same relationship as `assets/block.png`) with a *baked-in* checkerboard
-background (`Format24bppRgb` — no alpha channel at all; the "transparent-
-looking" squares were literal light-gray/white pixels, not real
-transparency). A naive color-threshold removal was rejected up front
-because the checkerboard's two tones are close to the wordmark's own white
-"PUZZLE" lettering — a global threshold would have eaten into the text.
-Used a **flood fill from the image border** instead (`PowerShell +
-System.Drawing`, no ImageMagick — see [[user_dev_machine_tooling]]):
-seed a queue with every border pixel that looks checkerboard-like (bright,
-low saturation: all channels ≥225 and within 10 of each other), then
-BFS/flood-fill 4-connected neighbors that pass the same test, zeroing
-alpha for every visited pixel. This only removes background *connected to
-the edge* — the white lettering is enclosed by darker outline/shadow
-pixels and is never reached by the flood, so it survives untouched
-regardless of how similar its color is to the checkerboard. Hit the same
-`New-Object Type($expr)` PowerShell gotcha as the block-art script (see
-[[user_dev_machine_tooling]]) in a new form: `[int]($p / $w)` for decoding
-a flattened pixel index back to (x, y) intermittently rounded via
-banker's-rounding instead of truncating, producing an occasional
-off-by-one row and an `IndexOutOfRangeException` deep in the byte array —
-fixed by computing `$px = $p % $w; $py = ($p - $px) / $w` (exact integer
-division by construction, no cast ambiguity). This flood-fill-from-border
-technique — not a global color/distance threshold — is the one to reuse
-for any future "remove a background that's color-similar to real
-foreground content" task.
+**App icon** (`assets/icon/icon.png`, consumed only by
+`flutter_launcher_icons` — see `pubspec.yaml`'s `flutter_launcher_icons:`
+block and `build-apk.yml`'s "Generate launcher icon" step, which runs
+`dart run flutter_launcher_icons` to write it into every
+`android/app/src/main/res/mipmap-*/` slot): currently a user-supplied
+square icon (`block-puzzle-plus-icon.png`, 1254x1254, opaque — rounded
+corners and the purple background are baked into the art itself rather
+than left transparent for the OS to mask, since this project only
+generates the legacy square/round launcher icon, not an adaptive
+foreground+background pair). **Originally** this file was a flood-filled
+wordmark shared with the home-screen title (see below) — split into two
+separate images on 2026-09-02 once the user supplied a dedicated icon-
+shaped asset, since a wordmark logo and a square app icon have
+fundamentally different aspect-ratio/composition needs and conflating them
+was only ever a "reuse what we already have" shortcut, not a deliberate
+design choice. The original flood-fill removal work (below) is kept for
+its *technique*, in case a future icon needs the same treatment, even
+though this specific file no longer needs it (the current source already
+ships with clean baked-in edges, confirmed via a pixel probe: corner reads
+opaque white, not a checkerboard).
+  - **Historical: flood-fill background removal.** The very first icon
+    source (`block-puzzle-plus-logo.png`, kept at the repo root as a
+    reference) had a *baked-in* checkerboard background (`Format24bppRgb`
+    — no alpha channel at all; the "transparent-looking" squares were
+    literal light-gray/white pixels). A naive color-threshold removal was
+    rejected up front because the checkerboard's two tones are close to
+    the wordmark's own white "PUZZLE" lettering — a global threshold would
+    have eaten into the text. Used a **flood fill from the image border**
+    instead (`PowerShell + System.Drawing`, no ImageMagick — see
+    [[user_dev_machine_tooling]]): seed a queue with every border pixel
+    that looks checkerboard-like (bright, low saturation: all channels
+    ≥225 and within 10 of each other), then BFS/flood-fill 4-connected
+    neighbors that pass the same test, zeroing alpha for every visited
+    pixel. This only removes background *connected to the edge* — the
+    white lettering is enclosed by darker outline/shadow pixels and is
+    never reached by the flood, so it survives untouched regardless of how
+    similar its color is to the checkerboard. Hit the same `New-Object
+    Type($expr)` PowerShell gotcha as the block-art script (see
+    [[user_dev_machine_tooling]]) in a new form: `[int]($p / $w)` for
+    decoding a flattened pixel index back to (x, y) intermittently rounded
+    via banker's-rounding instead of truncating, producing an occasional
+    off-by-one row and an `IndexOutOfRangeException` deep in the byte
+    array — fixed by computing `$px = $p % $w; $py = ($p - $px) / $w`
+    (exact integer division by construction, no cast ambiguity). This
+    flood-fill-from-border technique — not a global color/distance
+    threshold — is the one to reuse for any future "remove a background
+    that's color-similar to real foreground content" task.
+
+**Home screen title** (`assets/title/title.png`, `Image.asset(...,
+width: 220)` in `lib/screens/home_screen.dart`): a separate wordmark image
+from the app icon (see split rationale above) — source
+`block-puzzle-plus-title.png` already shipped with a real alpha channel
+(confirmed via pixel probe: corner alpha=0) and needed no background
+removal, just an **alpha-bounding-box crop** (same technique as the v2/v3
+block-art crops, but without the "force square" step those need — a
+wordmark's aspect ratio should stay whatever it naturally is, only the
+excess transparent margin gets trimmed) to strip ~105px of dead transparent
+margin on each side that would otherwise waste space at a fixed display
+width. A small 4px margin was kept around the computed bbox specifically
+so anti-aliased edge pixels (alpha just above the presence threshold, not
+fully 0) don't get clipped into a visible hard edge.
 
 The block-art slicing script (`PowerShell + System.Drawing`) went through
 two versions:

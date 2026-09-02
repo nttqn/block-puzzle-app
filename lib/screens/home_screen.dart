@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset('assets/icon/icon.png', width: 220),
+                Image.asset('assets/title/title.png', width: 220),
                 const SizedBox(height: 40),
                 for (final mode in GameMode.values) ...[
                   _ModeButton(
