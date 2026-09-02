@@ -33,6 +33,7 @@ flutter:
     - assets/audio/sfx_explosive.wav
     - assets/audio/sfx_menu_confirm.wav
     - assets/audio/sfx_menu_back.wav
+    - assets/audio/m_failed.mp3
 
 flutter_launcher_icons:
   android: true

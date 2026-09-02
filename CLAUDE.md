@@ -606,8 +606,8 @@ roughly every other finished game, not after every one.
 
 **Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
 same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`
-holds the source WAVs, `assets/audio/` holds the bundled copies actually
-declared in `pubspec.yaml` (keep both in sync if a sound is ever
+holds the source WAVs/MP3s, `assets/audio/` holds the bundled copies
+actually declared in `pubspec.yaml` (keep both in sync if a sound is ever
 added/replaced; there's no build step that copies one to the other).
 `SoundEffect` enum values map 1:1 to trigger points: `place`/`clear` fire
 from inside `GameEngine.placePiece` (same file, same spots as the existing
@@ -619,7 +619,14 @@ can fail to place two different ways — `Draggable.onDraggableCanceled` in
 `BoardWidget.onAcceptWithDetails`'s invalid-placement branch (dropped ON
 the board but on a cell it doesn't fit); `confirm`/`back` fire from
 `GameScreen`/`HomeScreen` button handlers (see their doc comments for the
-exact confirm-vs-back mapping). `init()` is fired **unawaited** from
+exact confirm-vs-back mapping); `gameOver` (`m_failed.mp3`, the one MP3 in
+an otherwise all-WAV set — `AudioPool` doesn't care about format) fires
+from both places `gameOver` actually flips to `true` — the bomb-timeout
+branch in `_tickBomb` and the tray-can't-fit branch after `_checkGameOver()`
+in `placePiece` — right alongside the existing `ScoreService.saveBest`/
+`LeaderboardService.submitScore` calls at each site, since both game-over
+conditions are otherwise independent and neither reuses the other's code
+path. `init()` is fired **unawaited** from
 `main()`, each pool creation individually wrapped in try/catch +
 `.timeout(5s)` — this exact pattern exists because of a real incident in
 [[project_number_master_app]] where an unguarded `FlameAudio.createPool()`

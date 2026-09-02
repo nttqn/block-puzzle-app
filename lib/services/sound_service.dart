@@ -2,7 +2,7 @@ import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum SoundEffect { place, pickupBack, clear, confirm, back }
+enum SoundEffect { place, pickupBack, clear, confirm, back, gameOver }
 
 /// Short one-shot sound effects, played via `flame_audio`'s `AudioPool`
 /// (same pattern as the rest of this game series). `init()` must be fired
@@ -24,6 +24,7 @@ class SoundService {
     SoundEffect.clear: 'sfx_explosive.wav',
     SoundEffect.confirm: 'sfx_menu_confirm.wav',
     SoundEffect.back: 'sfx_menu_back.wav',
+    SoundEffect.gameOver: 'm_failed.mp3',
   };
 
   final ValueNotifier<bool> enabledNotifier = ValueNotifier<bool>(true);

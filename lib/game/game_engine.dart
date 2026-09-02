@@ -104,6 +104,7 @@ class GameEngine extends ChangeNotifier {
     bomb!.secondsLeft--;
     if (bomb!.secondsLeft <= 0) {
       gameOver = true;
+      SoundService.instance.play(SoundEffect.gameOver);
       unawaited(ScoreService.instance.saveBest(mode, score));
       unawaited(LeaderboardService.submitScore(mode, score));
       timer.cancel();
@@ -266,6 +267,7 @@ class GameEngine extends ChangeNotifier {
 
     _checkGameOver();
     if (gameOver) {
+      SoundService.instance.play(SoundEffect.gameOver);
       unawaited(ScoreService.instance.saveBest(mode, score));
       unawaited(LeaderboardService.submitScore(mode, score));
     }
