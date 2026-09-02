@@ -28,9 +28,10 @@ jobs:
       - name: Generate Android platform project
         run: flutter create --platforms=android --org com.trungsmail --project-name block_puzzle .
 
-      - name: Patch AndroidManifest.xml (AdMob + app label)
+      - name: Patch AndroidManifest.xml (AdMob + Play Games + app label)
         env:
           ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+          PLAY_GAMES_APP_ID: ${{ secrets.PLAY_GAMES_APP_ID }}
         run: |
           set -e
           APP_ID="${ADMOB_APP_ID:-ca-app-pub-3940256099942544~3347511713}"
@@ -41,6 +42,16 @@ jobs:
           sed -i "s#<application#<uses-permission android:name=\"android.permission.INTERNET\"/>\n  <application#" "$MANIFEST"
           sed -i "s#</application>#    <meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"${APP_ID}\"/>\n  </application>#" "$MANIFEST"
           sed -i -E 's/android:label="[^"]*"/android:label="Block Puzzle Plus"/g' "$MANIFEST"
+          # Play Games Services needs this meta-data to sign in / submit
+          # scores at all. There's no universal test ID like AdMob's, so
+          # when the secret isn't set the leaderboard silently stays
+          # non-functional (LeaderboardService catches every call) rather
+          # than getting a fake value that would just fail differently.
+          if [ -n "${PLAY_GAMES_APP_ID}" ]; then
+            sed -i "s#</application>#    <meta-data android:name=\"com.google.android.gms.games.APP_ID\" android:value=\"${PLAY_GAMES_APP_ID}\"/>\n  </application>#" "$MANIFEST"
+          else
+            echo "::warning::PLAY_GAMES_APP_ID secret not set — the leaderboard (Play Games Services) will not work in this build until it's set."
+          fi
           cat "$MANIFEST"
 
       # google_mobile_ads requires minSdk 24+ (and a recent compileSdk).

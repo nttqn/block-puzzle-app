@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/piece.dart';
+import '../services/leaderboard_service.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
 import 'game_mode.dart';
@@ -82,6 +83,7 @@ class GameEngine extends ChangeNotifier {
     bomb = null;
     tray = List<PieceInstance?>.filled(trayCount, null);
     _refillTray();
+    unawaited(LeaderboardService.signIn());
 
     _bombTimer?.cancel();
     _bombTimer = null;
@@ -104,6 +106,7 @@ class GameEngine extends ChangeNotifier {
     if (bomb!.secondsLeft <= 0) {
       gameOver = true;
       unawaited(ScoreService.instance.saveBest(mode, score));
+      unawaited(LeaderboardService.submitScore(mode, score));
       timer.cancel();
     }
     notifyListeners();
@@ -265,6 +268,7 @@ class GameEngine extends ChangeNotifier {
     _checkGameOver();
     if (gameOver) {
       unawaited(ScoreService.instance.saveBest(mode, score));
+      unawaited(LeaderboardService.submitScore(mode, score));
     }
     notifyListeners();
   }

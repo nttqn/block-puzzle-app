@@ -5,8 +5,11 @@ This file provides guidance to Claude Code when working with code in this reposi
 ## What this is
 
 A Flutter Android block-puzzle game (`Block Puzzle Plus`), English UI, with AdMob
-banner + interstitial ads wired in, intended for Google Play. No leaderboard
-/ Play Games Services (deliberately skipped — this genre doesn't need one).
+banner + interstitial ads wired in, intended for Google Play. Play Games
+Services leaderboards (one per game mode) are wired in code — see "Leaderboard"
+below — but **not yet functional**: they need a Play Console project, two
+real leaderboard IDs, and a release keystore that don't exist for this
+project yet.
 The Dart package name (`block_puzzle`, i.e. every `package:block_puzzle/...`
 import) and the Android application ID (`com.trungsmail.block_puzzle`) were
 deliberately **not** renamed to match — those are internal identifiers, not
@@ -516,6 +519,50 @@ changing bomb timing logic.
 **Back button = pause, not exit**: `GameScreen` uses `PopScope(canPop:
 gameOver, onPopInvokedWithResult: ...)` to toggle the pause overlay instead
 of popping mid-round — mandatory rule for every game in this series.
+
+**Leaderboard (`lib/services/leaderboard_service.dart`)**: Google Play
+Games Services, one leaderboard per `GameMode` (Classic/Survival aren't
+comparable, same reason `ScoreService` tracks "best" per mode). Same
+`games_services` package and defensive pattern as
+[[project_number99_app]] (its `LeaderboardService` was the reference
+implementation copied here): every call wrapped in try/catch, an
+`_isSupported` check (Android-only — this project has no iOS target) and
+an `_isConfigured(mode)` check (the two leaderboard IDs are still
+`REPLACE_WITH_..._LEADERBOARD_ID` placeholders) both short-circuit to a
+safe no-op/`false` before ever touching a platform channel. `GameEngine`
+calls `LeaderboardService.signIn()` unawaited from `start()` and
+`LeaderboardService.submitScore(mode, score)` unawaited at both
+game-over paths (right next to the existing `ScoreService.saveBest` calls)
+— same "call side-effect services directly from the engine" precedent
+already established for `SoundService`/`HapticFeedback`. `HomeScreen` also
+calls `signIn()` once at `initState` (belt-and-suspenders, same dual-call-
+site pattern number99 used) and shows a small trophy `IconButton` next to
+each mode's "Best: N" button that calls `showLeaderboard(mode)`, falling
+back to a `SnackBar` ("Leaderboard not available yet.") when it returns
+`false` — covered by a widget test tapping it and asserting that message,
+which passes deterministically regardless of test-environment platform
+detection quirks since the placeholder-ID check alone already forces
+`false` before any platform-specific branch is reached. **This cannot
+work yet** — three separate real-world prerequisites are still missing,
+none of which code alone can satisfy:
+1. A Google Play Console project for this app with Play Games Services
+   enabled.
+2. Two real leaderboard IDs created there (Play Console > Play Games
+   Services > Leaderboards, one per mode) to replace the two placeholders
+   in `leaderboard_service.dart`.
+3. A real release keystore (see [[feedback_release_signing_setup]]) whose
+   SHA-1 is registered with the Play Games OAuth client — Play Games ties
+   sign-in to the app's signing certificate, so this can never be verified
+   against the debug-signed builds this project has used so far, and the
+   `PLAY_GAMES_APP_ID` GitHub secret (see `build-apk.yml`'s manifest patch
+   step, mirroring the `ADMOB_APP_ID` pattern) also needs the real Play
+   Games Services App ID once that project exists.
+Until all three exist, every leaderboard call safely no-ops — the game
+stays fully playable, "Best: N" per mode keeps working locally via
+`ScoreService` exactly as before, and the trophy button just shows the
+fallback message. Do not treat "the button doesn't do anything real yet"
+as a bug to fix in code — it's a known, deliberate state pending the
+user's own Play Console setup.
 
 **Ads (`lib/services/ads_service.dart`)**: same singleton pattern as the
 other games in this series, currently on Google's public TEST ad unit IDs

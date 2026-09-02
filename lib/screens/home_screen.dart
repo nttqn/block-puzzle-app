@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../game/game_mode.dart';
+import '../services/leaderboard_service.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
@@ -24,12 +27,20 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadBests();
+    unawaited(LeaderboardService.signIn());
   }
 
   Future<void> _loadBests() async {
     for (final mode in GameMode.values) {
       final best = await ScoreService.instance.loadBest(mode);
       if (mounted) setState(() => _bestByMode[mode] = best);
+    }
+  }
+
+  Future<void> _showLeaderboard(GameMode mode) async {
+    final opened = await LeaderboardService.showLeaderboard(mode);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leaderboard not available yet.')));
     }
   }
 
@@ -60,10 +71,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 Image.asset('assets/title/title.png', width: 220),
                 const SizedBox(height: 40),
                 for (final mode in GameMode.values) ...[
-                  _ModeButton(
-                    mode: mode,
-                    best: _bestByMode[mode] ?? 0,
-                    onTap: () => _play(mode),
+                  // Fixed total width (matches the old solo _ModeButton's own
+                  // width) with the leaderboard button carved out of it via
+                  // Expanded, rather than adding its width on top — keeps
+                  // this row exactly as narrow-screen-safe as it already was
+                  // (see tray_widget.dart's RenderFlex overflow fix for why
+                  // that margin matters: a fixed-width row content can
+                  // overflow on some real device widths even when it looks
+                  // fine at whatever width was last eyeballed).
+                  SizedBox(
+                    width: 260,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _ModeButton(
+                            mode: mode,
+                            best: _bestByMode[mode] ?? 0,
+                            onTap: () => _play(mode),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => _showLeaderboard(mode),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.leaderboard, color: Colors.amberAccent, size: 22),
+                          tooltip: '${mode.label} leaderboard',
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                 ],
@@ -116,47 +151,44 @@ class _ModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 260,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerLeft,
+      ),
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Icon(
+            mode == GameMode.survival
+                ? Icons.local_fire_department
+                : Icons.play_arrow,
+            size: 28,
           ),
-          alignment: Alignment.centerLeft,
-        ),
-        onPressed: onTap,
-        child: Row(
-          children: [
-            Icon(
-              mode == GameMode.survival
-                  ? Icons.local_fire_department
-                  : Icons.play_arrow,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    mode.label.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  mode.label.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                  Text(
-                    'Best: $best',
-                    style: const TextStyle(fontSize: 12, color: Colors.white60),
-                  ),
-                ],
-              ),
+                ),
+                Text(
+                  'Best: $best',
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

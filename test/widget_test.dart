@@ -14,4 +14,20 @@ void main() {
     expect(find.text('SURVIVAL'), findsOneWidget);
     expect(find.textContaining('Best:'), findsNWidgets(2));
   });
+
+  testWidgets('tapping a leaderboard button with no leaderboard configured shows a fallback message', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.pumpAndSettle();
+
+    // The leaderboard IDs are still placeholders (see leaderboard_service.dart)
+    // until Play Console is set up, so this must degrade to a message rather
+    // than crash or silently do nothing.
+    await tester.tap(find.byIcon(Icons.leaderboard).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Leaderboard not available yet.'), findsOneWidget);
+  });
 }
