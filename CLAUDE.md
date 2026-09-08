@@ -613,14 +613,13 @@ really 4 IDs, not 2). Same `games_services` package and defensive pattern
 as [[project_number99_app]] (its `LeaderboardService` was the reference
 implementation copied here): every call wrapped in try/catch, and an
 `_isSupported` check that short-circuits to a safe no-op/`false` before
-ever touching a platform channel. Both Android leaderboard IDs are real
-(`CgkIje_cuZ8REAIQAQ` for Classic, `CgkIje_cuZ8REAIQAg` for Survival — a
-Play Console project for this app now exists); the iOS ones are still
-`REPLACE_WITH_IOS_..._LEADERBOARD_ID` placeholders — create them in App
-Store Connect (the app's page → Features → Game Center → Leaderboards;
-unlike Play Console's opaque generated IDs, App Store Connect lets you
-choose the reference ID string yourself at creation time) and swap them
-in. **Was iOS-blind for a while after the iOS build itself started
+ever touching a platform channel. All four leaderboard IDs are real:
+Android's `CgkIje_cuZ8REAIQAQ` (Classic)/`CgkIje_cuZ8REAIQAg` (Survival)
+from Play Console; iOS's `classical`/`survival` chosen directly by the
+user when creating the two Game Center leaderboards in App Store Connect
+(unlike Play Console's opaque generated IDs, App Store Connect lets you
+pick the ID string yourself). **Was iOS-blind for a while after the iOS
+build itself started
 working**: `_isSupported` originally checked
 `defaultTargetPlatform == TargetPlatform.android` only, and every
 `submitScore`/`showLeaderboard` call only ever passed

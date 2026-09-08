@@ -9,12 +9,11 @@ import '../game/game_mode.dart';
 /// tracks "best" per mode for the same reason) and Play Games/Game Center
 /// use entirely separate leaderboard ID spaces for the same game.
 ///
-/// Both Android leaderboard IDs are real (created in Play Console). The
-/// iOS ones are still **placeholders** — Game Center leaderboards need to
-/// be created in App Store Connect (the app's own page → Features → Game
-/// Center → Leaderboards) with these exact reference IDs, unlike Play
-/// Console's opaque generated IDs, App Store Connect lets *you* choose the
-/// ID string at creation time.
+/// All four leaderboard IDs are real now: Android's from Play Console
+/// (opaque generated IDs), iOS's (`classical`/`survival`) chosen by the
+/// user directly when creating the two Game Center leaderboards in App
+/// Store Connect (unlike Play Console, App Store Connect lets you pick the
+/// ID string yourself).
 ///
 /// **This class was iOS-blind for a while after the iOS build itself was
 /// added** — `_isSupported` originally checked Android only, and every
@@ -58,8 +57,8 @@ class LeaderboardService {
   };
 
   static const Map<GameMode, String> _iosLeaderboardIds = {
-    GameMode.classic: 'REPLACE_WITH_IOS_CLASSIC_LEADERBOARD_ID',
-    GameMode.survival: 'REPLACE_WITH_IOS_SURVIVAL_LEADERBOARD_ID',
+    GameMode.classic: 'classical',
+    GameMode.survival: 'survival',
   };
 
   static const _timeout = Duration(seconds: 5);
