@@ -4,15 +4,18 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## What this is
 
-A Flutter Android block-puzzle game (`Block Puzzle Plus`), English UI, with AdMob
-banner + interstitial ads wired in, intended for Google Play. Play Games
-Services leaderboards (one per game mode, real leaderboard IDs from an
-existing Play Console project) are wired in code — see "Leaderboard"
-below — but **still unverified end-to-end**: Play Games ties sign-in to
-the app's signing certificate, and this project has only ever built
-debug-signed test APKs, so a real release keystore + the
-`PLAY_GAMES_APP_ID` GitHub secret still need to be set before a build can
-actually sign in.
+A Flutter block-puzzle game (`Block Puzzle Plus`), English UI, targeting
+Google Play (primary) with an iOS CI build also set up (see "iOS" below,
+still compile-check-only pending Apple Developer portal setup). AdMob
+banner + interstitial ads use real ad unit IDs; release signing uses a
+real keystore (both set 2026-09-02, CI builds confirmed succeeding). Play
+Games Services leaderboards (one per game mode, real leaderboard IDs, SHA-1
+registered with the OAuth client, `PLAY_GAMES_APP_ID` secret set) are
+wired in code — see "Leaderboard" below — but a real installed build still
+reported "Leaderboard not available yet" as of 2026-09-02; root cause not
+yet found (ruled out: stale build predating the secret — a fresh build was
+triggered and confirmed to include it). Treat leaderboard sign-in as an
+**open issue**, not confirmed working, until this is resolved.
 The Dart package name (`block_puzzle`, i.e. every `package:block_puzzle/...`
 import) and the Android application ID (`com.trungsmail.block_puzzle`) were
 deliberately **not** renamed to match — those are internal identifiers, not
@@ -23,7 +26,7 @@ was actually asked for. The display name (`MaterialApp.title`, the Android
 `android:label` set by CI, and the home screen's title art) is
 "Block Puzzle Plus".
 There is no native `android/` (or `ios/`/`web/`) directory committed — see
-"Android project is generated, not committed" below.
+"Android and iOS projects are generated, not committed" below.
 
 Two game modes, picked from the home screen (`lib/screens/home_screen.dart`,
 one button per `GameMode` value) and passed into `GameScreen(mode: ...)`:
@@ -49,16 +52,67 @@ flutter build appbundle --release  # AAB for Play Store upload (needs real signi
 Real APK builds happen in CI: push to `main` (or `workflow_dispatch`) runs
 `.github/workflows/build-apk.yml`.
 
-## Android project is generated, not committed
+## Android and iOS projects are generated, not committed
 
 Same pattern as this series' other games (chess-app, dino-egg-shooter,
-number99-app): `android/`, `web/`, etc. are gitignored, and CI regenerates
-`android/` via `flutter create` then patches in the AdMob App ID, INTERNET
+number99-app): `android/`, `ios/`, `web/`, etc. are gitignored, and CI
+regenerates each fresh on every build. For Android: `flutter create` then
+patch in the AdMob App ID, Play Games Services App ID, INTERNET
 permission, minSdk/compileSdk bump, R8 WorkManager keep rules, launcher
-icon, and (if secrets are set) release signing. See `build-apk.yml`'s
-inline comments for the exact why on each step — they're copied verbatim
-from the validated pattern, minus the Play Games Services steps (not needed
-here).
+icon, and (if secrets are set) release signing. For iOS: see the "iOS"
+section below. See `build-apk.yml`'s inline comments for the exact why on
+each step — they're copied verbatim from the validated pattern in
+[[project_number99_app]].
+
+## iOS
+
+Added 2026-09-02, copied from [[project_number99_app]]'s fully-validated
+`build-ios` job (same plugin set: `google_mobile_ads`, `games_services`,
+`flame_audio` — see that project's own CLAUDE.md for the full
+failure-by-failure trail this was derived from, and
+[[feedback_ios_ci_signing_setup]] in memory for the condensed reusable
+version). Runs on `macos-latest` in parallel with the Android job in the
+same `build-apk.yml` workflow. **Status: compile-check only until the
+user completes several Apple-Developer-portal steps that only they can
+do** — this is not something that can be finished from code alone:
+1. An active Apple Developer Program membership ($99/year, human-only
+   enrollment).
+2. An App ID created in the portal for `com.trungsmail.block_puzzle` with
+   the Game Center capability enabled (`games_services` needs this for
+   iOS leaderboard/sign-in, mirroring the Android Play Games Services
+   leaderboard).
+3. A Distribution certificate — generated **without needing a Mac**, since
+   this dev environment has none: a CSR via plain `openssl req` uploaded
+   to the portal, the resulting `.cer` combined with the original private
+   key into a `.p12` via `openssl pkcs12 -export`. See
+   [[feedback_ios_ci_signing_setup]] for the exact commands.
+4. An **App Store** provisioning profile in the portal, named exactly
+   "Block Puzzle Plus App Store" (this exact string is hardcoded in
+   `build-apk.yml`'s `PROVISIONING_PROFILE_SPECIFIER` and
+   `ExportOptions.plist` — if it's ever named differently in the portal,
+   update both places to match).
+5. Four GitHub secrets from the above: `IOS_DIST_P12_BASE64`,
+   `IOS_DIST_P12_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`,
+   `APPSTORE_TEAM_ID`.
+6. For the optional TestFlight upload step (opt-in only, via
+   `workflow_dispatch`'s `upload_ios` checkbox — never automatic on a
+   push, same reasoning as never auto-uploading the Android `.aab` to Play
+   Console): an App Store Connect API key, as three more secrets —
+   `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`, `APPSTORE_API_KEY_P8`.
+
+Until those secrets exist, the `build-ios` job still runs and is useful on
+its own: it proves the Flutter/Dart side and all three plugins actually
+compile for iOS (`flutter build ios --release --no-codesign`), it just
+skips every signing/archive/export/upload step (each gated on
+`steps.ios_signing.outputs.configured == 'true'`) and produces no `.ipa`.
+`tool/Runner.entitlements` (Game Center capability) and
+`flutter_launcher_icons_ios.yaml` (a separate config from `pubspec.yaml`'s
+Android-only `flutter_launcher_icons:` block — mixing the two broke both
+platforms at once on number99) are committed alongside `tool/` since
+`ios/` itself is regenerated fresh every run and can't hold anything
+persistent. The AdMob iOS App ID falls back to Google's public iOS TEST ID
+until a real `ADMOB_APP_ID_IOS` secret is set (this project's AdMob
+account currently only has an Android app entry).
 
 ## Architecture
 
