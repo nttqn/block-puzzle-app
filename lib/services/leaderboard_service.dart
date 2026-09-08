@@ -3,26 +3,35 @@ import 'package:games_services/games_services.dart';
 
 import '../game/game_mode.dart';
 
-/// Google Play Games Services leaderboard wiring — one leaderboard per
-/// [GameMode], since Classic and Survival scores aren't comparable (see
-/// `ScoreService`, which already tracks "best" per mode for the same
-/// reason).
+/// Google Play Games Services (Android) / Game Center (iOS) leaderboard
+/// wiring — one leaderboard per [GameMode] per platform, since Classic and
+/// Survival scores aren't comparable (see `ScoreService`, which already
+/// tracks "best" per mode for the same reason) and Play Games/Game Center
+/// use entirely separate leaderboard ID spaces for the same game.
 ///
-/// Both leaderboard IDs below are real (created in Play Console, one per
-/// mode). Using this still requires a Play Console project for this app
-/// (which it now has), Play Games Services enabled on it, and the
-/// `com.google.android.gms.games.APP_ID` manifest meta-data (see
-/// PLAY_GAMES_APP_ID in build-apk.yml) sourced from a real release-signed
-/// build — Play Games ties sign-in to the app's signing certificate, so
-/// this cannot be verified against the debug-signed builds this project has
-/// used so far. Every call here is wrapped in a try/catch: without all of
-/// the above, sign-in/submit/show calls fail, and that must never crash or
-/// block gameplay, the same way a failed ad load never blocks gameplay in
-/// `AdsService`.
+/// Both Android leaderboard IDs are real (created in Play Console). The
+/// iOS ones are still **placeholders** — Game Center leaderboards need to
+/// be created in App Store Connect (the app's own page → Features → Game
+/// Center → Leaderboards) with these exact reference IDs, unlike Play
+/// Console's opaque generated IDs, App Store Connect lets *you* choose the
+/// ID string at creation time.
 ///
-/// Android-only: `games_services` also supports Game Center on iOS/macOS,
-/// but this app has no iOS build target (see build-apk.yml,
-/// --platforms=android only), so anything else no-ops.
+/// **This class was iOS-blind for a while after the iOS build itself was
+/// added** — `_isSupported` originally checked Android only, and every
+/// call only ever passed `androidLeaderboardID`, leaving `iOSLeaderboardID`
+/// at the `games_services` package's empty-string default. That silently
+/// made every leaderboard call a no-op on iOS specifically (not a Game
+/// Center setup problem — the code never even tried), caught when the user
+/// reported "chưa có leaderboard" ("no leaderboard yet") on the first real
+/// iOS test after the signed build started working. **If iOS support is
+/// ever added for a new games_services-backed feature on this class,
+/// double-check both platforms are actually wired, not just the one
+/// that shipped first.**
+///
+/// Every call here is wrapped in a try/catch: without full Play
+/// Console/App Store Connect setup, sign-in/submit/show calls fail, and
+/// that must never crash or block gameplay, the same way a failed ad load
+/// never blocks gameplay in `AdsService`.
 ///
 /// **Every platform call below is also wrapped in a `.timeout(...)`** — this
 /// is not defensive-for-its-own-sake padding. `GameAuth.signIn()` calls a
@@ -43,16 +52,28 @@ import '../game/game_mode.dart';
 /// deterministically via `tester.pump(duration)` — no real wall-clock wait
 /// needed in tests.
 class LeaderboardService {
-  static const Map<GameMode, String> _leaderboardIds = {
+  static const Map<GameMode, String> _androidLeaderboardIds = {
     GameMode.classic: 'CgkIje_cuZ8REAIQAQ',
     GameMode.survival: 'CgkIje_cuZ8REAIQAg',
   };
 
+  static const Map<GameMode, String> _iosLeaderboardIds = {
+    GameMode.classic: 'REPLACE_WITH_IOS_CLASSIC_LEADERBOARD_ID',
+    GameMode.survival: 'REPLACE_WITH_IOS_SURVIVAL_LEADERBOARD_ID',
+  };
+
   static const _timeout = Duration(seconds: 5);
 
-  static bool get _isSupported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  static bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
 
-  static bool _isConfigured(GameMode mode) => !(_leaderboardIds[mode]?.startsWith('REPLACE_') ?? true);
+  static bool get _isSupported =>
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || _isIOS);
+
+  static String? _leaderboardIdForCurrentPlatform(GameMode mode) =>
+      _isIOS ? _iosLeaderboardIds[mode] : _androidLeaderboardIds[mode];
+
+  static bool _isConfigured(GameMode mode) =>
+      !(_leaderboardIdForCurrentPlatform(mode)?.startsWith('REPLACE_') ?? true);
 
   /// Silent sign-in, best attempted once at app/game startup. Play Games
   /// Services v2 also auto-prompts sign-in on its own, but the plugin docs
@@ -72,7 +93,11 @@ class LeaderboardService {
     if (!_isSupported || !_isConfigured(mode)) return;
     try {
       await Leaderboards.submitScore(
-        score: Score(androidLeaderboardID: _leaderboardIds[mode]!, value: score),
+        score: Score(
+          androidLeaderboardID: _androidLeaderboardIds[mode]!,
+          iOSLeaderboardID: _iosLeaderboardIds[mode]!,
+          value: score,
+        ),
       ).timeout(_timeout);
     } catch (_) {
       // Fire-and-forget — a failed submit must never interrupt the
@@ -80,15 +105,18 @@ class LeaderboardService {
     }
   }
 
-  /// Opens Play Games' own leaderboard UI for [mode]. Returns whether it
-  /// could — the caller can use this to show a "not available" message
-  /// instead of silently doing nothing when the user explicitly tapped a
-  /// button for it.
+  /// Opens Play Games'/Game Center's own leaderboard UI for [mode].
+  /// Returns whether it could — the caller can use this to show a "not
+  /// available" message instead of silently doing nothing when the user
+  /// explicitly tapped a button for it.
   static Future<bool> showLeaderboard(GameMode mode) async {
     if (!_isSupported || !_isConfigured(mode)) return false;
     try {
       await GameAuth.signIn().timeout(_timeout);
-      await Leaderboards.showLeaderboards(androidLeaderboardID: _leaderboardIds[mode]!).timeout(_timeout);
+      await Leaderboards.showLeaderboards(
+        androidLeaderboardID: _androidLeaderboardIds[mode]!,
+        iOSLeaderboardID: _iosLeaderboardIds[mode]!,
+      ).timeout(_timeout);
       return true;
     } catch (_) {
       return false;

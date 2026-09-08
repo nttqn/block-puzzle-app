@@ -605,16 +605,38 @@ gameOver, onPopInvokedWithResult: ...)` to toggle the pause overlay instead
 of popping mid-round — mandatory rule for every game in this series.
 
 **Leaderboard (`lib/services/leaderboard_service.dart`)**: Google Play
-Games Services, one leaderboard per `GameMode` (Classic/Survival aren't
-comparable, same reason `ScoreService` tracks "best" per mode). Same
-`games_services` package and defensive pattern as
-[[project_number99_app]] (its `LeaderboardService` was the reference
+Games Services (Android) / Game Center (iOS), one leaderboard per
+`GameMode` per platform (Classic/Survival aren't comparable, same reason
+`ScoreService` tracks "best" per mode — and Play Games/Game Center have
+entirely separate leaderboard ID spaces for the same game, so this is
+really 4 IDs, not 2). Same `games_services` package and defensive pattern
+as [[project_number99_app]] (its `LeaderboardService` was the reference
 implementation copied here): every call wrapped in try/catch, and an
-`_isSupported` check (Android-only — this project has no iOS target) that
-short-circuits to a safe no-op/`false` before ever touching a platform
-channel. Both leaderboard IDs are now real (`CgkIje_cuZ8REAIQAQ` for
-Classic, `CgkIje_cuZ8REAIQAg` for Survival — a Play Console project for
-this app now exists). `GameScreen.initState()` calls
+`_isSupported` check that short-circuits to a safe no-op/`false` before
+ever touching a platform channel. Both Android leaderboard IDs are real
+(`CgkIje_cuZ8REAIQAQ` for Classic, `CgkIje_cuZ8REAIQAg` for Survival — a
+Play Console project for this app now exists); the iOS ones are still
+`REPLACE_WITH_IOS_..._LEADERBOARD_ID` placeholders — create them in App
+Store Connect (the app's page → Features → Game Center → Leaderboards;
+unlike Play Console's opaque generated IDs, App Store Connect lets you
+choose the reference ID string yourself at creation time) and swap them
+in. **Was iOS-blind for a while after the iOS build itself started
+working**: `_isSupported` originally checked
+`defaultTargetPlatform == TargetPlatform.android` only, and every
+`submitScore`/`showLeaderboard` call only ever passed
+`androidLeaderboardID`, leaving `Score`/`showLeaderboards`'
+`iOSLeaderboardID` parameter at the package's empty-string default — so
+every leaderboard call silently no-op'd on iOS specifically, not because
+Game Center wasn't set up, but because the code never even tried. Caught
+when the user tested the first working signed iOS build and reported "no
+leaderboard yet." Fixed by adding a parallel `_iosLeaderboardIds` map,
+checking the *current* platform's configured-ness rather than only
+Android's, and passing both `androidLeaderboardID`/`iOSLeaderboardID` on
+every call (the package internally picks the right one via
+`Device.isPlatformAndroid`). **If iOS support is ever added for a new
+games_services-backed feature, verify both platforms are actually wired
+end-to-end — don't assume "it compiles for iOS" means "it does anything
+on iOS."** `GameScreen.initState()` calls
 `LeaderboardService.signIn()` unawaited (**not** `GameEngine.start()` —
 see the timer-leak note below for why it moved); `GameEngine` calls
 `LeaderboardService.submitScore(mode, score)` unawaited at both game-over
