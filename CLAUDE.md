@@ -77,10 +77,16 @@ user completes several Apple-Developer-portal steps that only they can
 do** — this is not something that can be finished from code alone:
 1. An active Apple Developer Program membership ($99/year, human-only
    enrollment).
-2. An App ID created in the portal for `com.trungsmail.block_puzzle` with
-   the Game Center capability enabled (`games_services` needs this for
-   iOS leaderboard/sign-in, mirroring the Android Play Games Services
-   leaderboard).
+2. An App ID created in the portal for `com.trungsmail.blockPuzzle` — note
+   this is **not** the same string as the Android application ID
+   (`com.trungsmail.block_puzzle`, underscore). Apple's App ID form
+   rejects underscores; Flutter itself already camelCases the project
+   name for iOS specifically (confirmed by actually running `flutter
+   create` and inspecting the generated `PRODUCT_BUNDLE_IDENTIFIER`, after
+   trying the Android-matching value first and having the portal reject
+   it). Must have the Game Center capability enabled (`games_services`
+   needs this for iOS leaderboard/sign-in, mirroring the Android Play
+   Games Services leaderboard).
 3. A Distribution certificate — generated **without needing a Mac**, since
    this dev environment has none: a CSR via plain `openssl req` uploaded
    to the portal, the resulting `.cer` combined with the original private

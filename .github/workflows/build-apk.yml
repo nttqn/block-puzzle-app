@@ -398,7 +398,14 @@ jobs:
             <string>manual</string>
             <key>provisioningProfiles</key>
             <dict>
-              <key>com.trungsmail.block_puzzle</key>
+              <!-- iOS bundle ID, NOT the Android applicationId — Flutter
+                   camelCases the project name for iOS since Apple doesn't
+                   allow underscores in an App ID (confirmed by actually
+                   running `flutter create` and inspecting the generated
+                   project.pbxproj's PRODUCT_BUNDLE_IDENTIFIER, after the
+                   Android-matching value was rejected by the Apple
+                   Developer portal). -->
+              <key>com.trungsmail.blockPuzzle</key>
               <string>Block Puzzle Plus App Store</string>
             </dict>
           </dict>

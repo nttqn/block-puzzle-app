@@ -58,6 +58,14 @@ app.*.map.json
 *.keystore
 key.properties
 
+# iOS signing — never commit these either (private key, cert, and the
+# provisioning profile are all sensitive/credential material).
+*.key
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+
 .flutter-plugins
 .metadata
 pubspec.lock
