@@ -97,28 +97,49 @@ do** — this is not something that can be finished from code alone:
    `build-apk.yml`'s `PROVISIONING_PROFILE_SPECIFIER` and
    `ExportOptions.plist` — if it's ever named differently in the portal,
    update both places to match).
-5. Four GitHub secrets from the above: `IOS_DIST_P12_BASE64`,
-   `IOS_DIST_P12_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64`,
-   `APPSTORE_TEAM_ID`.
+5. Four GitHub secrets from the above — **all set as of 2026-09-08**:
+   `IOS_DIST_P12_BASE64`, `IOS_DIST_P12_PASSWORD`,
+   `IOS_PROVISIONING_PROFILE_BASE64`, `APPSTORE_TEAM_ID` (`WGZYDZH4KR`,
+   the same Apple Developer team already used by
+   [[project_number99_app]]/[[project_lunar_calendar_app]] — Distribution
+   certs are team-scoped, not per-app, so the *same* certificate signs
+   every iOS app under this account; only the provisioning profile itself
+   is per-app/bundle-ID). `ADMOB_APP_ID_IOS` is also set (this project's
+   AdMob account now has a real iOS app entry, publisher
+   `9078637596840810` — same account as Android, separate app/ad-unit IDs
+   as usual).
 6. For the optional TestFlight upload step (opt-in only, via
    `workflow_dispatch`'s `upload_ios` checkbox — never automatic on a
    push, same reasoning as never auto-uploading the Android `.aab` to Play
    Console): an App Store Connect API key, as three more secrets —
    `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`, `APPSTORE_API_KEY_P8`.
+   **Not yet set** — TestFlight upload is still unverified.
 
-Until those secrets exist, the `build-ios` job still runs and is useful on
-its own: it proves the Flutter/Dart side and all three plugins actually
-compile for iOS (`flutter build ios --release --no-codesign`), it just
-skips every signing/archive/export/upload step (each gated on
-`steps.ios_signing.outputs.configured == 'true'`) and produces no `.ipa`.
 `tool/Runner.entitlements` (Game Center capability) and
 `flutter_launcher_icons_ios.yaml` (a separate config from `pubspec.yaml`'s
 Android-only `flutter_launcher_icons:` block — mixing the two broke both
 platforms at once on number99) are committed alongside `tool/` since
 `ios/` itself is regenerated fresh every run and can't hold anything
-persistent. The AdMob iOS App ID falls back to Google's public iOS TEST ID
-until a real `ADMOB_APP_ID_IOS` secret is set (this project's AdMob
-account currently only has an Android app entry).
+persistent.
+
+**The iOS bundle ID is `com.trungsmail.blockPuzzle` — not
+`com.trungsmail.block_puzzle`.** Apple's App ID creation form rejects
+underscores; Flutter itself already camelCases the project name for iOS
+specifically (confirmed by running `flutter create` locally and
+inspecting the generated `PRODUCT_BUNDLE_IDENTIFIER`, after the
+Android-matching value was rejected by the portal on the first attempt).
+The App Store provisioning profile is named exactly `Block Puzzle Plus App
+Store` — this string is hardcoded in `build-apk.yml`'s
+`PROVISIONING_PROFILE_SPECIFIER` and `ExportOptions.plist`; if it's ever
+renamed in the portal, update both places to match. Verified the
+downloaded `.mobileprovision` embeds the *correct* certificate before
+trusting it — this account has multiple identically-named "Apple
+Distribution: Ngo Thanh Trung (WGZYDZH4KR)" certs (one per project), a
+known mix-up risk documented in [[project_lunar_calendar_app]]'s memory —
+by extracting the profile's embedded `DeveloperCertificates` entry and
+diffing its SHA-1 fingerprint against the known-good one
+(`DE:97:33:41:5D:2F:BF:F9:23:3B:DE:1B:67:18:3F:FC:2B:1C:72:E7`) rather
+than trusting the display name or expiry alone.
 
 ## Architecture
 
@@ -660,13 +681,16 @@ via `ScoreService` exactly as before, and the trophy button shows the
 fallback message.
 
 **Ads (`lib/services/ads_service.dart`)**: same singleton pattern as the
-other games in this series. Both ad unit IDs are now real (this project's
-own AdMob account, publisher `9078637596840810`) — the `ADMOB_APP_ID`
-GitHub secret is still a separate value (the manifest-level Application
-ID, patched in by `build-apk.yml`, not either ad unit ID) and must also be
-set from the same AdMob account before a CI build serves real ads instead
-of Google's public TEST App ID. Interstitial shows roughly every other
-finished game, not after every one.
+other games in this series. All four ad unit IDs are real (this project's
+own AdMob account, publisher `9078637596840810`) — `bannerAdUnitId`/
+`interstitialAdUnitId` are `defaultTargetPlatform`-branching getters
+(same pattern as lunar-calendar-app's `AdsService`), not plain constants,
+since AdMob registers Android and iOS as separate "apps" with distinct ad
+unit IDs even under one account/listing. `ADMOB_APP_ID`/`ADMOB_APP_ID_IOS`
+are separate values again (the manifest-level Application IDs, patched in
+by `build-apk.yml`, not either platform's ad unit IDs) — both are also
+set as GitHub secrets. Interstitial shows roughly every other finished
+game, not after every one.
 
 **Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
 same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`
