@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Block Puzzle Plus — drag, clear, combo</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    margin: 0;
+    color: #1a1a1a;
+    background: #f5f3fa;
+  }
+  header {
+    background: linear-gradient(180deg, #3b1f78, #7c3aed);
+    text-align: center;
+    padding: 56px 20px 44px;
+  }
+  .badge {
+    width: 108px;
+    height: 108px;
+    border-radius: 26px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+    margin: 0 auto 20px;
+  }
+  h1 { font-size: 32px; margin: 0 0 8px; color: #fff; }
+  .tagline { font-size: 17px; color: #e6ddff; max-width: 460px; margin: 0 auto; }
+  .stores {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 28px;
+  }
+  .store-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    color: #3b1f78;
+    text-decoration: none;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .store-btn.disabled {
+    background: rgba(255,255,255,0.35);
+    color: #fff;
+    pointer-events: none;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 48px 20px 80px; }
+  .shots {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 56px;
+  }
+  .shots img {
+    width: 220px;
+    max-width: 80vw;
+    border-radius: 20px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  }
+  h2 { font-size: 24px; text-align: center; margin-bottom: 28px; }
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 24px;
+    margin-bottom: 16px;
+  }
+  .feature { background: #fff; border-radius: 14px; padding: 20px; }
+  .feature h3 { margin: 0 0 8px; font-size: 17px; }
+  .feature p { margin: 0; color: #555; font-size: 14px; line-height: 1.5; }
+  footer {
+    text-align: center;
+    padding: 32px 20px 48px;
+    color: #666;
+    font-size: 14px;
+  }
+  footer a { color: #6d28d9; }
+</style>
+</head>
+<body>
+
+<header>
+  <img class="badge" src="img/icon.png" alt="Block Puzzle Plus icon">
+  <h1>Block Puzzle Plus</h1>
+  <p class="tagline">Drag colorful blocks onto a 12&times;12 grid, clear rows and columns,
+  and chain combos for bonus points — in relaxed Classic mode or ticking-clock Survival.</p>
+  <div class="stores">
+    <a class="store-btn disabled" href="#" aria-disabled="true">Coming soon on Google Play</a>
+    <a class="store-btn disabled" href="#" aria-disabled="true">Coming soon on the App Store</a>
+  </div>
+</header>
+
+<main>
+  <div class="shots">
+    <img src="img/gameplay-classic.png" alt="Block Puzzle Plus Classic mode gameplay, a 12 by 12 grid with a tray of colorful blocks">
+    <img src="img/gameplay-survival.png" alt="Block Puzzle Plus Survival mode gameplay with a bomb tile countdown">
+  </div>
+
+  <h2>How it plays</h2>
+  <div class="features">
+    <div class="feature">
+      <h3>Drag &amp; fit</h3>
+      <p>Drag any of your 3 blocks onto the grid — fill a full row or column to clear it and score.</p>
+    </div>
+    <div class="feature">
+      <h3>Chain combos</h3>
+      <p>Clear 2 or more lines in one move for a growing COMBO bonus, or clear on consecutive moves for a streak multiplier.</p>
+    </div>
+    <div class="feature">
+      <h3>Classic or Survival</h3>
+      <p>Play at your own pace in Classic, or race a ticking bomb tile in Survival for extra pressure.</p>
+    </div>
+    <div class="feature">
+      <h3>Leaderboards</h3>
+      <p>Compare your best score with everyone else via Google Play Games or Game Center — one leaderboard per mode.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <a href="support.html">Support</a> · <a href="privacy.html">Privacy Policy</a>
+</footer>
+
+</body>
+</html>
