@@ -645,7 +645,8 @@ established for `SoundService`/`HapticFeedback`. `HomeScreen` shows a
 small trophy `IconButton` next to each mode's "Best: N" button that calls
 `showLeaderboard(mode)`, falling back to a `SnackBar` ("Leaderboard not
 available yet.") when it returns `false`.
-- **Every platform call is wrapped in `.timeout(Duration(seconds: 5))`.**
+- **Every platform call is wrapped in `.timeout(Duration(seconds: 12))`**
+  (raised from an original 5s — see the live-Play-Store bug below).
   Discovered why the hard way: with a placeholder (unconfigured) ID,
   `showLeaderboard` short-circuited before ever calling
   `GameAuth.signIn()`, so a real platform-channel call was never actually
@@ -664,8 +665,38 @@ available yet.") when it returns `false`.
   that can hang its caller forever. Fixed the same way: wrap every call in
   `.timeout(...)`. Since `Future.timeout` uses a real `Timer` internally,
   `flutter_test`'s fake clock resolves it deterministically via
-  `tester.pump(Duration(seconds: 6))` — no real wall-clock wait needed,
+  `tester.pump(Duration(seconds: 13))` — no real wall-clock wait needed,
   same mechanism already used for the bomb-countdown `Timer.periodic` test.
+- **Live Play Store bug, 2026-09-14: correct Play Console setup still
+  failed with "Leaderboard not available yet." until the timeout above was
+  raised.** Root cause took real back-and-forth to isolate (walked the
+  user through it live): everything on the Play Console side was
+  eventually correct — both leaderboard IDs, `PLAY_GAMES_APP_ID`, *and*
+  the SHA-1 of the actual **app signing key** (retrievable at Release →
+  Setup → App signing → "App signing key certificate") registered as its
+  own Android OAuth credential in Play Games Services' Configuration →
+  Credentials, published. **Play App Signing re-signs the AAB with a key
+  Google manages, separate from the upload key used to sign the AAB before
+  submission — the OAuth credential must be registered against the app
+  signing key's SHA-1, not the upload key's, or every real Play-Store-
+  installed copy fails Play Games auth even though a locally-built/
+  sideloaded APK (still signed with the upload key) would have worked
+  fine.** Even after fixing that, the leaderboard still failed on the home
+  screen's trophy button specifically. Cause: `GameScreen.initState()`
+  calls `LeaderboardService.signIn()` proactively, so a normal
+  play-a-round-first flow already has a signed-in session by the time the
+  trophy button is tapped — but tapping the trophy button *before* ever
+  starting a game makes `showLeaderboard()`'s own `GameAuth.signIn()` call
+  the player's very first-ever sign-in attempt, which on a real device can
+  surface an interactive Google consent bottom sheet requiring an actual
+  tap — not a silent background auth. The original 5s `.timeout()` could
+  kill that attempt before the player had a chance to notice and tap it,
+  producing the exact same user-facing symptom as a real config error.
+  Raised to 12s. **If this exact symptom recurs after Play Console
+  configuration is confirmed correct (ID/SHA-1/credential-published all
+  verified), suspect this timing race next** — specifically test via the
+  home screen trophy button *without* playing a round first, since that's
+  the path most likely to hit a fresh, never-yet-prompted sign-in.
 - **Timer-leak lesson, why `signIn()` moved out of `GameEngine.start()`.**
   `flutter_test`'s `testWidgets` fails a test outright ("A Timer is still
   pending even after the widget tree was disposed") if any real `Timer` —

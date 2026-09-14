@@ -61,7 +61,19 @@ class LeaderboardService {
     GameMode.survival: 'survival',
   };
 
-  static const _timeout = Duration(seconds: 5);
+  // 5s was the original value, but a *first-ever* Play Games sign-in on a
+  // real device can show an interactive Google consent bottom sheet (not
+  // just a silent background auth) — if the player doesn't tap it within
+  // 5s, this timeout used to kill the attempt before they got the chance,
+  // surfacing as "Leaderboard not available yet." even with fully correct
+  // Play Console setup. This is especially likely to bite the very first
+  // time, from the home screen's trophy button specifically:
+  // GameScreen.initState() calls signIn() proactively so a normal
+  // play-a-round-first flow usually has it already, but a user who taps
+  // the trophy button before ever starting a game hits this as their
+  // first-ever sign-in call, with no earlier attempt to have already
+  // resolved the consent prompt.
+  static const _timeout = Duration(seconds: 12);
 
   static bool get _isIOS => defaultTargetPlatform == TargetPlatform.iOS;
 

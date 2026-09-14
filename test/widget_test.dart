@@ -26,11 +26,13 @@ void main() {
     // Games handler under `flutter_test` — GameAuth.signIn() hangs on an
     // unresolved platform channel rather than throwing (see
     // leaderboard_service.dart's class doc), so LeaderboardService wraps it
-    // in a 5s `.timeout()`. Pump past that (a plain `pumpAndSettle()` won't
-    // trigger it — the underlying Future is genuinely pending, not just
-    // between animation frames) to reach the fallback message.
+    // in a 12s `.timeout()` (generous enough for a real first-time
+    // interactive Play Games consent prompt on a device). Pump past that
+    // (a plain `pumpAndSettle()` won't trigger it — the underlying Future
+    // is genuinely pending, not just between animation frames) to reach
+    // the fallback message.
     await tester.tap(find.byIcon(Icons.leaderboard).first);
-    await tester.pump(const Duration(seconds: 6));
+    await tester.pump(const Duration(seconds: 13));
     await tester.pumpAndSettle();
 
     expect(find.text('Leaderboard not available yet.'), findsOneWidget);
