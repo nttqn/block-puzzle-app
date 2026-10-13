@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/game_mode.dart';
 import '../services/leaderboard_service.dart';
+import '../services/music_service.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
@@ -25,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadBests();
+    MusicService.instance.playMenu();
   }
 
   Future<void> _loadBests() async {
@@ -46,6 +48,10 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => GameScreen(mode: mode)));
+    // GameScreen switched the looping bgm to its own track on the way in
+    // (Bgm.play() replaces whatever was already playing) — switch it back
+    // now that we're home again.
+    MusicService.instance.playMenu();
     _loadBests();
   }
 

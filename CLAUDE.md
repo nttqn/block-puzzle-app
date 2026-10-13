@@ -801,6 +801,51 @@ than inside `_PauseOverlay` itself) was a deliberate choice since the
 AppBar stays visible above the pause overlay anyway, so a second copy
 inside the overlay would just be a redundant duplicate control.
 
+**Background music (`lib/services/music_service.dart`, added
+2026-10-13)**: looping bgm, kept as its own service rather than folded into
+`SoundService` since `FlameAudio.bgm` is a different mechanism (a single
+lifecycle-aware looping player, not an `AudioPool`). Two tracks,
+`bgm_menu.wav`/`bgm_game.wav`, switched by calling `MusicService.instance
+.playMenu()`/`.playGame()` — `HomeScreen.initState()` plays menu music,
+`GameScreen.initState()` plays game music, and `HomeScreen._play()` plays
+menu music again right after its `Navigator.push` future resolves (i.e.
+the moment the player returns from a round) — `Bgm.play()` is documented
+as safe to call while another track is already playing, so switching is
+just calling it again with the other filename, no explicit stop needed.
+Respects the same `SoundService.enabledNotifier` toggle as SFX
+(deliberately no second music-specific toggle — one speaker icon already
+reads as "all game audio" to a player).
+- **Both tracks are procedurally synthesised, not recorded** — see
+  `tool/gen_music.js` (same pure-Node/WAV-via-math approach as
+  `tool/gen_audio.js`'s SFX, extended to full multi-voice composition: a
+  plucked "harpsichord" melody, an Alberti-bass broken-chord accompaniment,
+  a quarter-note bass, and — on the game track only — a soft filtered-
+  noise rhythmic tick). Regenerate from that script (`node
+  tool/gen_music.js`) rather than hand-editing the WAVs if the style,
+  tempo, or melody ever needs to change. Both are an 8-bar loop in C major
+  (I-V-vi-IV menu / I-IV-V-vi game, 116bpm/150bpm) deliberately ending each
+  loop back on the tonic for a clean seam.
+- **Reused the exact audio-focus fix from [[project_moto_xua_app]]
+  proactively, before it ever caused a cut-out here** — see
+  [[feedback_audioplayers_focus_and_keys]]: every `audioplayers`
+  `AudioPlayer` (every `AudioPool` SFX player *and* this bgm player)
+  requests Android audio focus on start by default, which pauses whichever
+  player already had it, so without this fix every single SFX would have
+  cut the looping music out for an instant. Fixed in two places that both
+  need it independently (`main()` fires both services' `init()` unawaited
+  with no guaranteed order, so neither can assume the other already set a
+  shared default): `SoundService.init()` sets the *global* default via
+  `AudioPlayer.global.setAudioContext(...)` (`audioFocus: none` / iOS
+  `ambient` category) before creating any pool, and
+  `MusicService.init()` passes the same `AudioContext` explicitly to
+  `FlameAudio.bgm.initialize()` rather than relying on that global default
+  (`FlameAudio.bgm` is a lazily-created static singleton with its *own*
+  internal fallback — `mixWithOthers` — the instant it's first
+  referenced, which could otherwise win the race). **If a future sound
+  effect is added and the music seems to stutter/cut on every SFX, this is
+  the first thing to check** — confirm neither of these two calls got
+  dropped, not that something new needs fixing from scratch.
+
 **GameScreen AppBar overflow (hardened, not conclusively reproduced,
 2026-09-02)**: a live Chrome session threw a real `RenderFlex overflowed
 by 79 pixels` in this AppBar's trailing actions slot

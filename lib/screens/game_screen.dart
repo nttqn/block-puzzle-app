@@ -7,6 +7,7 @@ import '../game/game_engine.dart';
 import '../game/game_mode.dart';
 import '../services/ads_service.dart';
 import '../services/leaderboard_service.dart';
+import '../services/music_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
 import '../widgets/board_widget.dart';
@@ -40,6 +41,7 @@ class _GameScreenState extends State<GameScreen> {
     _engine.addListener(_onEngineChanged);
     _engine.start(mode: widget.mode);
     unawaited(LeaderboardService.signIn());
+    MusicService.instance.playGame();
     _bannerAd = AdsService.instance.createBannerAd(
       onLoaded: () => setState(() => _bannerLoaded = true),
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 import 'services/ads_service.dart';
+import 'services/music_service.dart';
 import 'services/sound_service.dart';
 
 Future<void> main() async {
@@ -13,6 +14,7 @@ Future<void> main() async {
   // asset can leave AudioPool.create()'s Future never resolving on web,
   // which would otherwise hang the whole app before its first frame.
   unawaited(SoundService.instance.init());
+  unawaited(MusicService.instance.init());
   runApp(const BlockPuzzleApp());
 }
 

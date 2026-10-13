@@ -34,6 +34,28 @@ class SoundService {
     final prefs = await SharedPreferences.getInstance();
     enabledNotifier.value = prefs.getBool(_enabledKey) ?? true;
 
+    try {
+      // By default every audioplayers AudioPlayer (including every
+      // AudioPool player created below, and MusicService's looping bgm
+      // track) requests Android audio focus on start, which *pauses*
+      // whichever player already had it — so once MusicService starts a
+      // looping track, every single SFX here would cut it out for an
+      // instant. Nothing in this app needs exclusive focus, so nobody
+      // takes it. Must run before any AudioPool/Bgm player is created, so
+      // they all inherit this as their default context. Confirmed as a
+      // real cut-out bug (not theoretical) on [[project_moto_xua_app]] —
+      // see [[feedback_audioplayers_focus_and_keys]].
+      await AudioPlayer.global.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.none),
+          iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
+        ),
+      );
+    } catch (_) {
+      // Worst case every sound still plays, just with the default (focus-
+      // stealing) behavior — never let this block the app starting.
+    }
+
     for (final entry in _files.entries) {
       try {
         final pool = await FlameAudio.createPool(entry.value, minPlayers: 1, maxPlayers: 3)
