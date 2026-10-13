@@ -791,7 +791,9 @@ preview used for the rest of this project's UI verification.
 
 **Sound toggle** (`lib/widgets/sound_toggle_button.dart`, a
 `SoundToggleButton` shared by `HomeScreen`'s AppBar and `GameScreen`'s
-AppBar): reflects `SoundService.instance.enabledNotifier` via
+AppBar): controls **only** SFX — see "Background music" below for the
+separate, independent music toggle added later. Reflects
+`SoundService.instance.enabledNotifier` via
 `ValueListenableBuilder`, calls `.toggle()` (flips the notifier + persists
 to `shared_preferences`) on tap. Deliberately just one shared widget
 rather than separate implementations per screen — kept in
@@ -812,9 +814,18 @@ menu music again right after its `Navigator.push` future resolves (i.e.
 the moment the player returns from a round) — `Bgm.play()` is documented
 as safe to call while another track is already playing, so switching is
 just calling it again with the other filename, no explicit stop needed.
-Respects the same `SoundService.enabledNotifier` toggle as SFX
-(deliberately no second music-specific toggle — one speaker icon already
-reads as "all game audio" to a player).
+Has its own independent `enabledNotifier` (persisted under `music_enabled`
+in `shared_preferences`, same pattern as `SoundService`'s own toggle) —
+**not** shared with `SoundService`'s. This was a deliberate reversal of
+this class's original design (which *did* share the SFX toggle, reasoning
+"one speaker icon already reads as all game audio") after the user
+explicitly asked for a separate music on/off control
+(`lib/widgets/music_toggle_button.dart`, a note-icon `IconButton` sharing
+the exact same compact-constraints treatment as `SoundToggleButton` —
+placed in both `HomeScreen`'s and `GameScreen`'s AppBar `actions`,
+alongside the existing sound toggle). **If a future change touches either
+toggle, remember they're now fully independent on purpose** — muting SFX
+must not silence music and vice versa.
 - **Both tracks are procedurally synthesised, not recorded** — see
   `tool/gen_music.js` (same pure-Node/WAV-via-math approach as
   `tool/gen_audio.js`'s SFX, extended to full multi-voice composition: a

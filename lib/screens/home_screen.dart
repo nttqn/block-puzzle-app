@@ -6,6 +6,7 @@ import '../services/music_service.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
+import '../widgets/music_toggle_button.dart';
 import '../widgets/sound_toggle_button.dart';
 import 'game_screen.dart';
 
@@ -63,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: const [SoundToggleButton()],
+        actions: const [MusicToggleButton(), SoundToggleButton()],
       ),
       body: AppBackground(
         child: SafeArea(

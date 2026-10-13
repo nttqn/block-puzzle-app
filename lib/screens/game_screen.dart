@@ -11,6 +11,7 @@ import '../services/music_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
 import '../widgets/board_widget.dart';
+import '../widgets/music_toggle_button.dart';
 import '../widgets/sound_toggle_button.dart';
 import '../widgets/tray_widget.dart';
 
@@ -118,6 +119,7 @@ class _GameScreenState extends State<GameScreen> {
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
+            const MusicToggleButton(),
             const SoundToggleButton(),
             IconButton(
               icon: Icon(_engine.paused ? Icons.play_arrow : Icons.pause),
