@@ -52,6 +52,11 @@ class MusicService {
         ),
       );
       _initialized = true;
+      // HomeScreen.initState usually calls playMenu() before this init
+      // (fired unawaited from main) finishes, so that request was only
+      // recorded in _wanted — start it now or first launch stays silent.
+      final pending = _wanted;
+      if (pending != null) _play(pending);
     } catch (_) {
       // No bgm this session (e.g. a broken/missing asset) — the game must
       // stay fully playable in silence, same contract as SoundService.
