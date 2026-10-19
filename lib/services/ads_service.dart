@@ -26,11 +26,9 @@ class AdsService {
       ? 'ca-app-pub-9078637596840810/9210293061'
       : 'ca-app-pub-9078637596840810/4039693603';
 
-  // TODO: these are Google's public TEST rewarded unit IDs. Replace with real
-  // "Rewarded" ad units from the AdMob console before a store release.
   static String get rewardedAdUnitId => defaultTargetPlatform == TargetPlatform.iOS
-      ? 'ca-app-pub-3940256099942544/1712485313'
-      : 'ca-app-pub-3940256099942544/5224354917';
+      ? 'ca-app-pub-9078637596840810/3659514061'
+      : 'ca-app-pub-9078637596840810/7598759071';
 
   InterstitialAd? _interstitialAd;
   int _gamesSinceInterstitial = 0;

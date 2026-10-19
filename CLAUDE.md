@@ -744,9 +744,8 @@ by `build-apk.yml`, not either platform's ad unit IDs) — both are also
 set as GitHub secrets. Interstitial shows roughly every other finished
 game, not after every one.
 
-**Rewarded ads**: `rewardedAdUnitId` is currently Google's public TEST
-rewarded unit (`ca-app-pub-3940256099942544/...`) — real "Rewarded" units
-still need creating in AdMob and swapping in before a store release.
+**Rewarded ads**: `rewardedAdUnitId` uses real units (Android
+`.../7598759071`, iOS `.../3659514061`), same platform-branching pattern.
 `showRewarded()` resolves true only if `onUserEarnedReward` fired; on web
 it resolves true unconditionally so power-ups stay testable in Chrome.
 
