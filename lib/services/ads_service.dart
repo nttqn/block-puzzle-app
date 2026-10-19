@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -24,13 +26,62 @@ class AdsService {
       ? 'ca-app-pub-9078637596840810/9210293061'
       : 'ca-app-pub-9078637596840810/4039693603';
 
+  // TODO: these are Google's public TEST rewarded unit IDs. Replace with real
+  // "Rewarded" ad units from the AdMob console before a store release.
+  static String get rewardedAdUnitId => defaultTargetPlatform == TargetPlatform.iOS
+      ? 'ca-app-pub-3940256099942544/1712485313'
+      : 'ca-app-pub-3940256099942544/5224354917';
+
   InterstitialAd? _interstitialAd;
   int _gamesSinceInterstitial = 0;
+  RewardedAd? _rewardedAd;
 
   Future<void> initialize() async {
     if (kIsWeb) return;
     await MobileAds.instance.initialize();
     _loadInterstitial();
+    _loadRewarded();
+  }
+
+  void _loadRewarded() {
+    if (kIsWeb) return;
+    RewardedAd.load(
+      adUnitId: rewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) => _rewardedAd = ad,
+        onAdFailedToLoad: (_) => _rewardedAd = null,
+      ),
+    );
+  }
+
+  /// Shows a rewarded ad and resolves true only if the user earned the
+  /// reward. On web (no ads) it resolves true so power-ups stay testable in
+  /// `flutter run -d chrome`.
+  Future<bool> showRewarded() {
+    if (kIsWeb) return Future.value(true);
+    final ad = _rewardedAd;
+    if (ad == null) {
+      _loadRewarded();
+      return Future.value(false);
+    }
+    _rewardedAd = null;
+    final completer = Completer<bool>();
+    var earned = false;
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _loadRewarded();
+        if (!completer.isCompleted) completer.complete(earned);
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+        _loadRewarded();
+        if (!completer.isCompleted) completer.complete(false);
+      },
+    );
+    ad.show(onUserEarnedReward: (_, _) => earned = true);
+    return completer.future;
   }
 
   BannerAd? createBannerAd({required void Function() onLoaded}) {

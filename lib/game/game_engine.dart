@@ -71,6 +71,20 @@ class GameEngine extends ChangeNotifier {
   int? comboBannerMultiplier;
   int comboBannerSeq = 0;
 
+  /// Power-up charges, each reset to 1 free use per game in [start]. Once
+  /// spent, the UI offers a rewarded ad for one more use (passed back in as
+  /// `grantedByAd: true`, which performs the action without touching these).
+  int undoCharges = 1;
+  int hammerCharges = 1;
+  int shuffleCharges = 1;
+
+  /// A snapshot of state as it was immediately before the most recent
+  /// [placePiece] call, consumed by [undo] (and, via [continueAfterGameOver],
+  /// by the Game Over "watch ad to continue" option). Only one level deep —
+  /// a fresh snapshot overwrites the previous one on every placement.
+  _Snapshot? _lastSnapshot;
+  bool _usedContinue = false;
+
   Future<void> start({GameMode mode = GameMode.classic}) async {
     this.mode = mode;
     best = await ScoreService.instance.loadBest(mode);
@@ -83,6 +97,11 @@ class GameEngine extends ChangeNotifier {
     bomb = null;
     tray = List<PieceInstance?>.filled(trayCount, null);
     _refillTray();
+    undoCharges = 1;
+    hammerCharges = 1;
+    shuffleCharges = 1;
+    _lastSnapshot = null;
+    _usedContinue = false;
 
     _bombTimer?.cancel();
     _bombTimer = null;
@@ -160,6 +179,8 @@ class GameEngine extends ChangeNotifier {
     if (paused || gameOver) return;
     final piece = tray[trayIndex];
     if (piece == null) return;
+
+    _lastSnapshot = _Snapshot.capture(this);
 
     for (final cell in piece.cells) {
       board[originRow + cell.row][originCol + cell.col] = piece.color;
@@ -266,11 +287,7 @@ class GameEngine extends ChangeNotifier {
     }
 
     _checkGameOver();
-    if (gameOver) {
-      SoundService.instance.play(SoundEffect.gameOver);
-      unawaited(ScoreService.instance.saveBest(mode, score));
-      unawaited(LeaderboardService.submitScore(mode, score));
-    }
+    if (gameOver) _onGameEnded();
     notifyListeners();
   }
 
@@ -279,6 +296,89 @@ class GameEngine extends ChangeNotifier {
       if (piece != null && _canPlaceAnywhere(piece)) return;
     }
     gameOver = true;
+  }
+
+  /// True once a move has actually been made this game (there's something to
+  /// undo) and, after a game-over, only until the one-time continue has
+  /// already been used.
+  bool get canUndo => _lastSnapshot != null && clearingCells.isEmpty;
+
+  bool get canContinueAfterGameOver => gameOver && _lastSnapshot != null && !_usedContinue;
+
+  /// Reverts the board/tray/score/combo/bomb to how they were immediately
+  /// before the most recent [placePiece] call, and clears [gameOver] if that
+  /// placement is what ended the run. Only one level deep: calling this
+  /// twice in a row without an intervening placement is a no-op the second
+  /// time (there's nothing left to restore to).
+  void undo({bool grantedByAd = false}) {
+    final snapshot = _lastSnapshot;
+    if (snapshot == null || clearingCells.isNotEmpty) return;
+    if (!grantedByAd) {
+      if (undoCharges <= 0) return;
+      undoCharges--;
+    }
+    snapshot.restore(this);
+    _lastSnapshot = null;
+    SoundService.instance.play(SoundEffect.back);
+    notifyListeners();
+  }
+
+  /// The Game Over overlay's "watch ad to continue" action: undoes the
+  /// fatal placement (bypassing [undoCharges], since this is a separate,
+  /// one-time-per-game grant) and, in survival mode, restarts the bomb timer
+  /// in case it was cancelled when the bomb reached zero.
+  void continueAfterGameOver() {
+    if (!canContinueAfterGameOver) return;
+    _usedContinue = true;
+    undo(grantedByAd: true);
+    if (mode == GameMode.survival) {
+      _bombTimer?.cancel();
+      _bombTimer = Timer.periodic(const Duration(seconds: 1), _tickBomb);
+    }
+  }
+
+  /// Destroys a single filled cell (including a bomb tile, which defuses it)
+  /// without needing a full line clear. No-ops on an empty cell or while the
+  /// game isn't actively playable.
+  void hammerDestroy(int row, int col, {bool grantedByAd = false}) {
+    if (paused || gameOver || clearingCells.isNotEmpty) return;
+    if (board[row][col] == null) return;
+    if (!grantedByAd) {
+      if (hammerCharges <= 0) return;
+      hammerCharges--;
+    }
+    board[row][col] = null;
+    if (bomb != null && bomb!.row == row && bomb!.col == col) {
+      bomb = null;
+    }
+    // Undo only reverts placements; letting it also silently roll back a
+    // power-up the player just spent would waste that power-up.
+    _lastSnapshot = null;
+    SoundService.instance.play(SoundEffect.clear);
+    _checkGameOver();
+    notifyListeners();
+  }
+
+  /// Replaces every tray slot with a fresh fair-picked piece — an escape
+  /// valve when none of the current three fit anywhere useful.
+  void shuffleTray({bool grantedByAd = false}) {
+    if (paused || gameOver || clearingCells.isNotEmpty) return;
+    if (!grantedByAd) {
+      if (shuffleCharges <= 0) return;
+      shuffleCharges--;
+    }
+    _refillTray();
+    _lastSnapshot = null;
+    SoundService.instance.play(SoundEffect.pickupBack);
+    _checkGameOver();
+    if (gameOver) _onGameEnded();
+    notifyListeners();
+  }
+
+  void _onGameEnded() {
+    SoundService.instance.play(SoundEffect.gameOver);
+    unawaited(ScoreService.instance.saveBest(mode, score));
+    unawaited(LeaderboardService.submitScore(mode, score));
   }
 
   void _refillTray() {
@@ -347,4 +447,37 @@ class BombTile {
   final int col;
   int secondsLeft;
   BombTile({required this.row, required this.col, required this.secondsLeft});
+}
+
+/// Everything [GameEngine.undo] needs to put back. [PieceInstance] is
+/// immutable, so a shallow copy of the tray list is enough; the board and
+/// bomb are mutated in place by gameplay and need real copies.
+class _Snapshot {
+  final List<List<Color?>> board;
+  final List<PieceInstance?> tray;
+  final int score;
+  final int best;
+  final int combo;
+  final BombTile? bomb;
+
+  _Snapshot._(this.board, this.tray, this.score, this.best, this.combo, this.bomb);
+
+  factory _Snapshot.capture(GameEngine e) => _Snapshot._(
+        [for (final row in e.board) List<Color?>.of(row)],
+        List<PieceInstance?>.of(e.tray),
+        e.score,
+        e.best,
+        e.combo,
+        e.bomb == null ? null : BombTile(row: e.bomb!.row, col: e.bomb!.col, secondsLeft: e.bomb!.secondsLeft),
+      );
+
+  void restore(GameEngine e) {
+    e.board = [for (final row in board) List<Color?>.of(row)];
+    e.tray = List<PieceInstance?>.of(tray);
+    e.score = score;
+    e.best = best;
+    e.combo = combo;
+    e.bomb = bomb == null ? null : BombTile(row: bomb!.row, col: bomb!.col, secondsLeft: bomb!.secondsLeft);
+    e.gameOver = false;
+  }
 }

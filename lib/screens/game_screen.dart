@@ -12,6 +12,7 @@ import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
 import '../widgets/board_widget.dart';
 import '../widgets/music_toggle_button.dart';
+import '../widgets/power_up_bar.dart';
 import '../widgets/sound_toggle_button.dart';
 import '../widgets/tray_widget.dart';
 
@@ -59,6 +60,7 @@ class _GameScreenState extends State<GameScreen> {
   void _restart() {
     SoundService.instance.play(SoundEffect.confirm);
     _interstitialShown = false;
+    _hammerArmed = false;
     _engine.start(mode: widget.mode);
   }
 
@@ -70,6 +72,63 @@ class _GameScreenState extends State<GameScreen> {
   void _exitToMenu() {
     SoundService.instance.play(SoundEffect.confirm);
     Navigator.of(context).pop();
+  }
+
+  bool _hammerArmed = false;
+  bool _adInFlight = false;
+
+  /// Runs [action] directly while free charges remain; otherwise offers a
+  /// rewarded ad and runs it with `grantedByAd: true` only if it was earned.
+  Future<void> _usePowerUp(int charges, void Function({bool grantedByAd}) action) async {
+    if (charges > 0) {
+      action();
+      return;
+    }
+    if (_adInFlight) return;
+    final wasPaused = _engine.paused;
+    if (!wasPaused) _engine.togglePause();
+    _adInFlight = true;
+    final earned = await AdsService.instance.showRewarded();
+    _adInFlight = false;
+    if (!mounted) return;
+    if (!wasPaused && _engine.paused) _engine.togglePause();
+    if (earned) {
+      action(grantedByAd: true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ad not available right now. Try again later.')),
+      );
+    }
+  }
+
+  void _onHammerButton() {
+    SoundService.instance.play(SoundEffect.confirm);
+    setState(() => _hammerArmed = !_hammerArmed);
+  }
+
+  void _onHammerTap(int row, int col) {
+    if (_engine.board[row][col] == null) return;
+    setState(() => _hammerArmed = false);
+    _usePowerUp(
+      _engine.hammerCharges,
+      ({bool grantedByAd = false}) => _engine.hammerDestroy(row, col, grantedByAd: grantedByAd),
+    );
+  }
+
+  Future<void> _continueAfterGameOver() async {
+    if (_adInFlight) return;
+    _adInFlight = true;
+    final earned = await AdsService.instance.showRewarded();
+    _adInFlight = false;
+    if (!mounted) return;
+    if (earned) {
+      _interstitialShown = false;
+      _engine.continueAfterGameOver();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ad not available right now. Try again later.')),
+      );
+    }
   }
 
   @override
@@ -179,15 +238,30 @@ class _GameScreenState extends State<GameScreen> {
                               return SizedBox(
                                 width: boardExtent,
                                 height: boardExtent,
-                                child: BoardWidget(engine: _engine),
+                                child: BoardWidget(
+                                  engine: _engine,
+                                  hammerArmed: _hammerArmed,
+                                  onHammerTap: _onHammerTap,
+                                ),
                               );
                             },
                           ),
                         ),
                       ),
                     ),
+                    PowerUpBar(
+                      undoCharges: _engine.undoCharges,
+                      hammerCharges: _engine.hammerCharges,
+                      shuffleCharges: _engine.shuffleCharges,
+                      canUndo: _engine.canUndo,
+                      enabled: !_engine.paused && !_engine.gameOver,
+                      hammerArmed: _hammerArmed,
+                      onUndo: () => _usePowerUp(_engine.undoCharges, _engine.undo),
+                      onHammer: _onHammerButton,
+                      onShuffle: () => _usePowerUp(_engine.shuffleCharges, _engine.shuffleTray),
+                    ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       child: ValueListenableBuilder<double>(
                         valueListenable: _boardCellSize,
                         builder: (context, boardCellSize, _) {
@@ -217,6 +291,7 @@ class _GameScreenState extends State<GameScreen> {
                   _GameOverOverlay(
                     score: _engine.score,
                     best: _engine.best,
+                    onContinue: _engine.canContinueAfterGameOver ? _continueAfterGameOver : null,
                     onRestart: _restart,
                     onExit: _exitToMenu,
                   ),
@@ -357,12 +432,14 @@ class _PauseOverlay extends StatelessWidget {
 class _GameOverOverlay extends StatelessWidget {
   final int score;
   final int best;
+  final VoidCallback? onContinue;
   final VoidCallback onRestart;
   final VoidCallback onExit;
 
   const _GameOverOverlay({
     required this.score,
     required this.best,
+    required this.onContinue,
     required this.onRestart,
     required this.onExit,
   });
@@ -400,6 +477,18 @@ class _GameOverOverlay extends StatelessWidget {
               style: const TextStyle(color: Colors.white54, fontSize: 16),
             ),
             const SizedBox(height: 24),
+            if (onContinue != null) ...[
+              ElevatedButton.icon(
+                onPressed: onContinue,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.play_circle_fill),
+                label: const Text('Continue (watch ad)'),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [

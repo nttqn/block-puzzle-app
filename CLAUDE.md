@@ -744,6 +744,35 @@ by `build-apk.yml`, not either platform's ad unit IDs) — both are also
 set as GitHub secrets. Interstitial shows roughly every other finished
 game, not after every one.
 
+**Rewarded ads**: `rewardedAdUnitId` is currently Google's public TEST
+rewarded unit (`ca-app-pub-3940256099942544/...`) — real "Rewarded" units
+still need creating in AdMob and swapping in before a store release.
+`showRewarded()` resolves true only if `onUserEarnedReward` fired; on web
+it resolves true unconditionally so power-ups stay testable in Chrome.
+
+**Power-ups (added v1.0.2+5)**: Undo / Hammer / Shuffle
+(`lib/widgets/power_up_bar.dart`, between board and tray). Each gets 1 free
+charge per game (`GameEngine.undoCharges` etc., reset in `start()`); once
+spent, `GameScreen._usePowerUp` pauses, shows a rewarded ad, and on reward
+calls the engine method with `grantedByAd: true` (does not bank a charge).
+- **Undo** restores a one-level `_Snapshot` (board, tray, score, best,
+  combo, bomb) taken at the top of `placePiece()`. Hammer/Shuffle clear the
+  snapshot — otherwise Undo would also silently revert the power-up just
+  spent.
+- **Hammer** arms a mode (`GameScreen._hammerArmed`, amber glow on board);
+  the next board tap goes through `BoardWidget.onHammerTap` →
+  `hammerDestroy(row, col)`. Empty cells are ignored without spending a
+  charge; hitting the bomb tile defuses it. Dragging still works while armed.
+- **Shuffle** refills the tray via `_pickFairPiece()`; if the new tray still
+  fits nowhere, the run ends via `_onGameEnded()` like a normal game over.
+- **Continue on Game Over**: `continueAfterGameOver()` = undo of the fatal
+  move, rewarded-ad only, once per run (`_usedContinue`), doesn't spend the
+  free Undo, and restarts the survival bomb timer (it's cancelled when the
+  bomb hits zero).
+- All power-up methods no-op while `clearingCells` is non-empty (the 160ms
+  line-clear await inside `placePiece`), so a mid-animation tap can't
+  restore a snapshot that the in-flight clear then overwrites.
+
 **Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
 same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`
 holds the source WAVs/MP3s, `assets/audio/` holds the bundled copies

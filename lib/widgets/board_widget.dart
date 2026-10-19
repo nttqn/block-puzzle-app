@@ -16,7 +16,11 @@ import 'tray_widget.dart';
 class BoardWidget extends StatefulWidget {
   final GameEngine engine;
 
-  const BoardWidget({super.key, required this.engine});
+  /// While true, tapping a board cell calls [onHammerTap] with its row/col.
+  final bool hammerArmed;
+  final void Function(int row, int col)? onHammerTap;
+
+  const BoardWidget({super.key, required this.engine, this.hammerArmed = false, this.onHammerTap});
 
   @override
   State<BoardWidget> createState() => _BoardWidgetState();
@@ -169,7 +173,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
             }
           },
           builder: (context, candidateData, rejectedData) {
-            return Container(
+            final board = Container(
               key: _boardKey,
               width: constraints.maxWidth,
               height: constraints.maxWidth,
@@ -177,6 +181,9 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                 color: const Color(0xFF1B2430),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFF0E141C), width: 3),
+                boxShadow: widget.hammerArmed
+                    ? const [BoxShadow(color: Colors.amberAccent, blurRadius: 14, spreadRadius: 2)]
+                    : null,
               ),
               child: Stack(
                 clipBehavior: Clip.none,
@@ -215,6 +222,16 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                   for (final entry in _activeComboBanners) _buildComboBanner(entry, cellSize),
                 ],
               ),
+            );
+            if (!widget.hammerArmed) return board;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) {
+                final row = (details.localPosition.dy / cellSize).floor();
+                final col = (details.localPosition.dx / cellSize).floor();
+                if (_inBounds(row, col)) widget.onHammerTap?.call(row, col);
+              },
+              child: board,
             );
           },
         );

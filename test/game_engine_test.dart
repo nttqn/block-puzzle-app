@@ -153,6 +153,118 @@ void main() {
     });
   });
 
+  group('power-ups', () {
+    GameEngine engineWithTray() {
+      final engine = GameEngine();
+      engine.tray[0] = _horizontalLineOf(3);
+      engine.tray[1] = _singleCell();
+      engine.tray[2] = _singleCell();
+      return engine;
+    }
+
+    test('undo restores the board, tray and score and spends a charge', () async {
+      final engine = engineWithTray();
+      expect(engine.canUndo, isFalse);
+      await engine.placePiece(0, 0, 0);
+      expect(engine.score, 3);
+
+      engine.undo();
+
+      expect(engine.board[0].every((cell) => cell == null), isTrue);
+      expect(engine.tray[0], isNotNull);
+      expect(engine.score, 0);
+      expect(engine.best, 0);
+      expect(engine.undoCharges, 0);
+      expect(engine.canUndo, isFalse);
+    });
+
+    test('using hammer or shuffle clears the undo snapshot', () async {
+      final engine = engineWithTray();
+      await engine.placePiece(0, 0, 0);
+      engine.shuffleTray();
+      expect(engine.canUndo, isFalse);
+    });
+
+    test('undo with no charges left only works when granted by an ad', () async {
+      final engine = engineWithTray();
+      engine.undoCharges = 0;
+      await engine.placePiece(0, 0, 0);
+
+      engine.undo();
+      expect(engine.score, 3, reason: 'no charge, no ad: nothing should happen');
+
+      engine.undo(grantedByAd: true);
+      expect(engine.score, 0);
+      expect(engine.undoCharges, 0);
+    });
+
+    test('hammer clears one filled cell and spends a charge; empty cells are ignored', () {
+      final engine = engineWithTray();
+      engine.hammerDestroy(5, 5);
+      expect(engine.hammerCharges, 1, reason: 'empty cell must not spend a charge');
+
+      engine.board[5][5] = kPieceColors.first;
+      engine.hammerDestroy(5, 5);
+      expect(engine.board[5][5], isNull);
+      expect(engine.hammerCharges, 0);
+    });
+
+    test('hammer on the bomb tile defuses it', () async {
+      final engine = GameEngine();
+      await engine.start(mode: GameMode.survival);
+      final bomb = engine.bomb!;
+
+      engine.hammerDestroy(bomb.row, bomb.col);
+
+      expect(engine.bomb, isNull);
+      expect(engine.board[bomb.row][bomb.col], isNull);
+      engine.dispose();
+    });
+
+    test('shuffle replaces every tray slot and spends a charge', () {
+      final engine = engineWithTray();
+      final before = List.of(engine.tray);
+
+      engine.shuffleTray();
+
+      for (var i = 0; i < GameEngine.trayCount; i++) {
+        expect(identical(engine.tray[i], before[i]), isFalse);
+      }
+      expect(engine.shuffleCharges, 0);
+    });
+
+    test('continue after game over undoes the fatal move exactly once', () async {
+      final engine = GameEngine();
+      for (var r = 0; r < GameEngine.boardSize; r++) {
+        for (var c = 0; c < GameEngine.boardSize; c++) {
+          engine.board[r][c] = kPieceColors.first;
+        }
+      }
+      for (var i = 0; i < GameEngine.boardSize; i++) {
+        engine.board[i][i] = null;
+      }
+      engine.board[6][2] = null;
+      engine.board[3][6] = null;
+      engine.tray[0] = _singleCell();
+      engine.tray[1] = _horizontalLineOf(2);
+      engine.tray[2] = null;
+      await engine.placePiece(0, 6, 6);
+      expect(engine.gameOver, isTrue);
+      expect(engine.canContinueAfterGameOver, isTrue);
+
+      engine.continueAfterGameOver();
+
+      expect(engine.gameOver, isFalse);
+      expect(engine.board[6][6], isNull);
+      expect(engine.tray[0], isNotNull);
+      expect(engine.undoCharges, 1, reason: 'continue must not spend the free undo');
+
+      await engine.placePiece(0, 6, 6);
+      expect(engine.gameOver, isTrue);
+      expect(engine.canContinueAfterGameOver, isFalse);
+    });
+  });
+
   group('survival mode bomb', () {
     test('classic mode never spawns a bomb', () async {
       final engine = GameEngine();
