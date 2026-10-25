@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../debug/screenshot_scenarios.dart';
 import '../game/game_mode.dart';
 import '../services/leaderboard_service.dart';
 import '../services/music_service.dart';
@@ -28,6 +29,13 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadBests();
     MusicService.instance.playMenu();
+    final shot = screenshotScenario;
+    if (shot != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        shot == 'howto' ? _showHowToPlay(context) : _play(scenarioMode(shot));
+      });
+    }
   }
 
   Future<void> _loadBests() async {
@@ -128,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'Drag blocks from the tray onto the grid.\n\n'
           'Fill an entire row or column to clear it and score points.\n\n'
           'Clear multiple lines at once, or clear lines back-to-back, for bonus combo points.\n\n'
+          'Power-ups: Undo your last move, smash one block with the Hammer, or Shuffle your 3 blocks. One free use each per game, more by watching a short video.\n\n'
           'Classic: the game ends when none of your 3 blocks fit on the board.\n\n'
           'Survival: a bomb tile is always ticking down somewhere on the board — clear its row or column before time runs out, or it\'s game over.',
         ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../debug/screenshot_scenarios.dart';
 import '../game/game_engine.dart';
 import '../game/game_mode.dart';
 import '../services/ads_service.dart';
@@ -41,7 +42,10 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     _engine.addListener(_onEngineChanged);
-    _engine.start(mode: widget.mode);
+    _engine.start(mode: widget.mode).then((_) {
+      final shot = screenshotScenario;
+      if (shot != null && mounted) setState(() => applyScenario(shot, _engine));
+    });
     unawaited(LeaderboardService.signIn());
     MusicService.instance.playGame();
     _bannerAd = AdsService.instance.createBannerAd(
