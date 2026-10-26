@@ -781,6 +781,39 @@ calls the engine method with `grantedByAd: true` (does not bank a charge).
   line-clear await inside `placePiece`), so a mid-animation tap can't
   restore a snapshot that the in-flight clear then overwrites.
 
+**Progression features (added v1.0.3+6)**:
+- **Save/resume** (`lib/services/game_save_service.dart`, key
+  `saved_game_<mode>`): `GameEngine.persist()` writes `toSave()` JSON after
+  every placement/power-up/undo, when the app is backgrounded
+  (`GameScreen.didChangeAppLifecycleState`, which also pauses so the bomb
+  stops), and in `GameScreen.dispose`. Game over and `start()` delete it.
+  Colors are stored as ARGB ints and pieces as their own cell lists, so
+  reordering `kAllShapes`/`kPieceColors` can't corrupt saves.
+  `persistEnabled` is false for bare engines (tests) and switched off for
+  `?shot=` scenes — otherwise a screenshot run leaves a save behind and the
+  next scene opens on the Resume dialog. Home shows "Saved game · N" and
+  asks Resume / New game. The undo snapshot is not saved.
+- **Daily** (`GameMode.daily`, `lib/services/daily_service.dart`): Classic
+  rules, pieces from `Random(int.parse(yyyymmdd))`. `_pieceDraws` counts
+  every draw (including `_pickFairPiece` retries) so `restoreSave` can
+  fast-forward a fresh seeded `Random` to the same point. A daily save from
+  an earlier day is discarded. Results go to `DailyService.record` (today's
+  best is a max; streak +1 only when the day is yesterday+1), not to
+  `ScoreService` or the leaderboard (there's no daily leaderboard; the map
+  lookup in `LeaderboardService` just reports "not configured").
+- **New best mid-game**: `newBestSeq` bumps once when the score first passes
+  `_startBest` (never on a first-ever game, best 0); `BoardWidget` plays a
+  2.2s confetti + "NEW BEST!" overlay.
+- **x2 score**: Game Over button, rewarded ad, `doubleScore()` once per run.
+  It also uses up the Continue (doubling then continuing would be an exploit).
+- **Daily gift / banked power-ups** (`lib/services/power_up_inventory.dart`):
+  one random free power-up per day plus one more per day for a rewarded ad,
+  banked under `bank_<powerup>`. `GameScreen._usePowerUp` spends in order:
+  the game's free charge, then a banked one, then an ad. The power-up badge
+  shows free + banked.
+- Store scene 07 is now `07-new-best` (best seeded via `?best=` in the init
+  script); combo x3 moved to 10, replacing the old high-score scene.
+
 **Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
 same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`
 holds the source WAVs/MP3s, `assets/audio/` holds the bundled copies

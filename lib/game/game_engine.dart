@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/piece.dart';
+import '../services/daily_service.dart';
+import '../services/game_save_service.dart';
 import '../services/leaderboard_service.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
@@ -84,10 +86,40 @@ class GameEngine extends ChangeNotifier {
   /// a fresh snapshot overwrites the previous one on every placement.
   _Snapshot? _lastSnapshot;
   bool _usedContinue = false;
+  bool _doubled = false;
+
+  /// The `yyyymmdd` day a [GameMode.daily] game belongs to (null otherwise).
+  /// Seeds [_pieceRng]; [_pieceDraws] counts pieces drawn from it so a
+  /// resumed daily game can fast-forward to the same point in the sequence.
+  String? dailyDate;
+  Random _pieceRng = Random();
+  int _pieceDraws = 0;
+
+  /// The best score this game started against. The first time [score]
+  /// passes it, [newBestSeq] bumps once so the UI can celebrate mid-run.
+  int _startBest = 0;
+  bool _newBestCelebrated = false;
+  int newBestSeq = 0;
+
+  /// Engines made by tests shouldn't write a save file; only a real
+  /// [start]/[resume] turns this on. Screenshot scenes turn it back off.
+  bool persistEnabled = false;
 
   Future<void> start({GameMode mode = GameMode.classic}) async {
     this.mode = mode;
-    best = await ScoreService.instance.loadBest(mode);
+    if (mode == GameMode.daily) {
+      dailyDate = todayKey();
+      _pieceRng = Random(int.parse(dailyDate!));
+      best = await DailyService.instance.bestFor(dailyDate!);
+    } else {
+      dailyDate = null;
+      _pieceRng = Random();
+      best = await ScoreService.instance.loadBest(mode);
+    }
+    _pieceDraws = 0;
+    _startBest = best;
+    _newBestCelebrated = false;
+    _doubled = false;
     board = List.generate(boardSize, (_) => List<Color?>.filled(boardSize, null));
     score = 0;
     combo = 0;
@@ -109,7 +141,125 @@ class GameEngine extends ChangeNotifier {
       _maybeSpawnBomb();
       _bombTimer = Timer.periodic(const Duration(seconds: 1), _tickBomb);
     }
+    persistEnabled = true;
+    unawaited(GameSaveService.instance.clear(mode));
     notifyListeners();
+  }
+
+  /// Picks up the saved in-progress game for [mode]. Returns false (leaving
+  /// the engine untouched) when there is none, or when it's a daily game
+  /// from a day that's already over.
+  Future<bool> resume(GameMode mode) async {
+    final save = await GameSaveService.instance.load(mode);
+    if (save == null) return false;
+    try {
+      final date = save['daily'] as String?;
+      if (mode == GameMode.daily && date != todayKey()) {
+        await GameSaveService.instance.clear(mode);
+        return false;
+      }
+      final stored = mode == GameMode.daily
+          ? await DailyService.instance.bestFor(date!)
+          : await ScoreService.instance.loadBest(mode);
+      restoreSave(save, storedBest: stored);
+    } catch (_) {
+      await GameSaveService.instance.clear(mode);
+      return false;
+    }
+    _bombTimer?.cancel();
+    _bombTimer = null;
+    if (mode == GameMode.survival) {
+      _bombTimer = Timer.periodic(const Duration(seconds: 1), _tickBomb);
+    }
+    persistEnabled = true;
+    notifyListeners();
+    return true;
+  }
+
+  /// The saved form of the current game. Colors are stored as ARGB ints
+  /// (0 = empty cell) and pieces as their own cell lists, so the save
+  /// doesn't depend on shape/color list order staying the same.
+  Map<String, dynamic> toSave() => {
+        'v': 1,
+        'mode': mode.name,
+        'daily': dailyDate,
+        'draws': _pieceDraws,
+        'score': score,
+        'combo': combo,
+        'startBest': _startBest,
+        'celebrated': _newBestCelebrated,
+        'board': [
+          for (final row in board)
+            for (final cell in row) cell?.toARGB32() ?? 0,
+        ],
+        'tray': [
+          for (final p in tray)
+            p == null
+                ? null
+                : {
+                    'cells': [for (final c in p.cells) ...[c.row, c.col]],
+                    'h': p.height,
+                    'w': p.width,
+                    'color': p.color.toARGB32(),
+                  },
+        ],
+        'bomb': bomb == null ? null : [bomb!.row, bomb!.col, bomb!.secondsLeft],
+        'charges': [undoCharges, hammerCharges, shuffleCharges],
+        'usedContinue': _usedContinue,
+      };
+
+  void restoreSave(Map<String, dynamic> s, {required int storedBest}) {
+    mode = GameMode.values.byName(s['mode'] as String);
+    dailyDate = s['daily'] as String?;
+    _pieceDraws = s['draws'] as int;
+    _pieceRng = dailyDate == null ? Random() : Random(int.parse(dailyDate!));
+    for (var i = 0; i < _pieceDraws; i++) {
+      randomPiece(_pieceRng);
+    }
+    score = s['score'] as int;
+    combo = s['combo'] as int;
+    _startBest = s['startBest'] as int;
+    _newBestCelebrated = s['celebrated'] as bool;
+    best = score > storedBest ? score : storedBest;
+    final cells = (s['board'] as List).cast<int>();
+    board = [
+      for (var r = 0; r < boardSize; r++)
+        [for (var c = 0; c < boardSize; c++) cells[r * boardSize + c] == 0 ? null : Color(cells[r * boardSize + c])],
+    ];
+    tray = [
+      for (final p in s['tray'] as List)
+        if (p == null)
+          null
+        else
+          PieceInstance(
+            cells: [
+              for (var i = 0; i < (p['cells'] as List).length; i += 2)
+                Cell(p['cells'][i] as int, p['cells'][i + 1] as int),
+            ],
+            height: p['h'] as int,
+            width: p['w'] as int,
+            color: Color(p['color'] as int),
+          ),
+    ];
+    final b = s['bomb'] as List?;
+    bomb = b == null ? null : BombTile(row: b[0] as int, col: b[1] as int, secondsLeft: b[2] as int);
+    final charges = (s['charges'] as List).cast<int>();
+    undoCharges = charges[0];
+    hammerCharges = charges[1];
+    shuffleCharges = charges[2];
+    _usedContinue = s['usedContinue'] as bool;
+    _doubled = false;
+    gameOver = false;
+    paused = false;
+    clearingCells = {};
+    _lastSnapshot = null;
+  }
+
+  /// Writes the current game to disk (called after every move/power-up and
+  /// when the app is backgrounded). A finished game is never saved.
+  void persist() {
+    if (!persistEnabled || gameOver) return;
+    unawaited(GameSaveService.instance.save(mode, toSave()));
   }
 
   @override
@@ -123,9 +273,7 @@ class GameEngine extends ChangeNotifier {
     bomb!.secondsLeft--;
     if (bomb!.secondsLeft <= 0) {
       gameOver = true;
-      SoundService.instance.play(SoundEffect.gameOver);
-      unawaited(ScoreService.instance.saveBest(mode, score));
-      unawaited(LeaderboardService.submitScore(mode, score));
+      _onGameEnded();
       timer.cancel();
     }
     notifyListeners();
@@ -285,9 +433,14 @@ class GameEngine extends ChangeNotifier {
     if (score > best) {
       best = score;
     }
+    if (!_newBestCelebrated && _startBest > 0 && score > _startBest) {
+      _newBestCelebrated = true;
+      newBestSeq++;
+    }
 
     _checkGameOver();
     if (gameOver) _onGameEnded();
+    persist();
     notifyListeners();
   }
 
@@ -320,6 +473,7 @@ class GameEngine extends ChangeNotifier {
     snapshot.restore(this);
     _lastSnapshot = null;
     SoundService.instance.play(SoundEffect.back);
+    persist();
     notifyListeners();
   }
 
@@ -356,6 +510,8 @@ class GameEngine extends ChangeNotifier {
     _lastSnapshot = null;
     SoundService.instance.play(SoundEffect.clear);
     _checkGameOver();
+    if (gameOver) _onGameEnded();
+    persist();
     notifyListeners();
   }
 
@@ -372,11 +528,36 @@ class GameEngine extends ChangeNotifier {
     SoundService.instance.play(SoundEffect.pickupBack);
     _checkGameOver();
     if (gameOver) _onGameEnded();
+    persist();
+    notifyListeners();
+  }
+
+  /// Game Over's "x2 score (watch ad)": doubles the final score once. It
+  /// cashes the run out, so the one-time continue is gone afterwards.
+  bool get canDoubleScore => gameOver && !_doubled && score > 0;
+
+  void doubleScore() {
+    if (!canDoubleScore) return;
+    _doubled = true;
+    _usedContinue = true;
+    score *= 2;
+    if (score > best) best = score;
+    _recordResult();
+    SoundService.instance.play(SoundEffect.confirm);
     notifyListeners();
   }
 
   void _onGameEnded() {
     SoundService.instance.play(SoundEffect.gameOver);
+    _recordResult();
+    if (persistEnabled) unawaited(GameSaveService.instance.clear(mode));
+  }
+
+  void _recordResult() {
+    if (mode == GameMode.daily) {
+      if (dailyDate != null) unawaited(DailyService.instance.record(dailyDate!, score));
+      return;
+    }
     unawaited(ScoreService.instance.saveBest(mode, score));
     unawaited(LeaderboardService.submitScore(mode, score));
   }
@@ -387,15 +568,20 @@ class GameEngine extends ChangeNotifier {
     }
   }
 
+  PieceInstance _draw() {
+    _pieceDraws++;
+    return randomPiece(_pieceRng);
+  }
+
   /// Picks a random piece, retrying a few times if the board is nearly full
   /// so a fresh tray doesn't hand the player an immediately-unplaceable
   /// piece more often than necessary. Not a hard guarantee (the genre's
   /// classic "unlucky board" game-over is still possible by design).
   PieceInstance _pickFairPiece() {
-    PieceInstance candidate = randomPiece();
+    PieceInstance candidate = _draw();
     for (var attempt = 0; attempt < 20; attempt++) {
       if (_canPlaceAnywhere(candidate)) return candidate;
-      candidate = randomPiece();
+      candidate = _draw();
     }
     return candidate;
   }

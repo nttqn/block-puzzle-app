@@ -62,10 +62,11 @@ const SCENES = [
   { file: '04-hammer', shot: 'hammer', hammer: true },
   { file: '05-survival', shot: 'survival' },
   { file: '06-game-over', shot: 'gameover', drag: [0, 6, 6], after: 900 },
-  { file: '07-combo-x3', shot: 'combo3', drag: [0, 10, 7], after: 380 },
+  // Best seeded just under the scene's score so the drag beats it mid-run.
+  { file: '07-new-best', shot: 'combo', best: 990, drag: [1, 10.5, 4], after: 1300 },
   { file: '08-bomb-countdown', shot: 'urgent' },
   { file: '09-how-to-play', shot: 'howto' },
-  { file: '10-high-score', shot: 'dense' },
+  { file: '10-combo-x3', shot: 'combo3', drag: [0, 10, 7], after: 380 },
 ];
 
 async function shoot(browser, { dir, w: W, h: H, dsf, max }) {
@@ -75,12 +76,14 @@ async function shoot(browser, { dir, w: W, h: H, dsf, max }) {
   const tmp = path.join(os.tmpdir(), `bp_${dir}.png`);
   const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: dsf });
   await context.addInitScript(() => {
-    localStorage.setItem('flutter.best_score_classic', '2860');
+    const best = location.search.match(/best=(\d+)/);
+    localStorage.setItem('flutter.best_score_classic', best ? best[1] : '2860');
     localStorage.setItem('flutter.best_score_survival', '1450');
   });
   const page = await context.newPage();
-  const load = async (shot) => {
-    await page.goto(`http://localhost:8877/${shot ? `?shot=${shot}` : ''}`, { waitUntil: 'load' });
+  const load = async (shot, best) => {
+    const q = [shot && `shot=${shot}`, best && `best=${best}`].filter(Boolean).join('&');
+    await page.goto(`http://localhost:8877/${q ? `?${q}` : ''}`, { waitUntil: 'load' });
     await page.waitForSelector('flutter-view', { timeout: 30000 });
     // Covers engine boot, the scenario's route push and its transition.
     await page.waitForTimeout(3500);
@@ -97,7 +100,7 @@ async function shoot(browser, { dir, w: W, h: H, dsf, max }) {
   const slotX = [W / 6, W / 2, (5 * W) / 6];
 
   for (const s of SCENES.slice(0, max)) {
-    await load(s.shot);
+    await load(s.shot, s.best);
     if (s.hammer) {
       await page.mouse.click(W / 2, hy);
       await page.waitForTimeout(600);

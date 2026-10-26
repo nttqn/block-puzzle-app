@@ -9,6 +9,7 @@ import '../game/game_mode.dart';
 import '../services/ads_service.dart';
 import '../services/leaderboard_service.dart';
 import '../services/music_service.dart';
+import '../services/power_up_inventory.dart';
 import '../services/sound_service.dart';
 import '../widgets/app_background.dart';
 import '../widgets/board_widget.dart';
@@ -20,13 +21,17 @@ import '../widgets/tray_widget.dart';
 class GameScreen extends StatefulWidget {
   final GameMode mode;
 
-  const GameScreen({super.key, this.mode = GameMode.classic});
+  /// Pick up the saved in-progress game for [mode] instead of starting fresh
+  /// (falls back to a fresh game if there turns out to be none).
+  final bool resume;
+
+  const GameScreen({super.key, this.mode = GameMode.classic, this.resume = false});
 
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   final GameEngine _engine = GameEngine();
   BannerAd? _bannerAd;
   bool _bannerLoaded = false;
@@ -42,15 +47,37 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     _engine.addListener(_onEngineChanged);
-    _engine.start(mode: widget.mode).then((_) {
-      final shot = screenshotScenario;
-      if (shot != null && mounted) setState(() => applyScenario(shot, _engine));
-    });
+    WidgetsBinding.instance.addObserver(this);
+    PowerUpInventory.instance.addListener(_onInventoryChanged);
+    _begin();
     unawaited(LeaderboardService.signIn());
     MusicService.instance.playGame();
     _bannerAd = AdsService.instance.createBannerAd(
       onLoaded: () => setState(() => _bannerLoaded = true),
     );
+  }
+
+  Future<void> _begin() async {
+    if (widget.resume && await _engine.resume(widget.mode)) return;
+    await _engine.start(mode: widget.mode);
+    final shot = screenshotScenario;
+    if (shot != null && mounted) {
+      _engine.persistEnabled = false;
+      setState(() => applyScenario(shot, _engine));
+    }
+  }
+
+  void _onInventoryChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) return;
+    // Backgrounded (or a call came in): stop the bomb clock and save, so the
+    // run is still there if the OS kills the app.
+    if (!_engine.paused && !_engine.gameOver && !_adInFlight) _engine.togglePause();
+    _engine.persist();
   }
 
   void _onEngineChanged() {
@@ -81,14 +108,20 @@ class _GameScreenState extends State<GameScreen> {
   bool _hammerArmed = false;
   bool _adInFlight = false;
 
-  /// Runs [action] directly while free charges remain; otherwise offers a
-  /// rewarded ad and runs it with `grantedByAd: true` only if it was earned.
-  Future<void> _usePowerUp(int charges, void Function({bool grantedByAd}) action) async {
+  /// Runs [action] directly while this game's free charge remains, then
+  /// from the banked daily-gift inventory, and only after that offers a
+  /// rewarded ad; the last two run it with `grantedByAd: true` (free of the
+  /// engine's own charges).
+  Future<void> _usePowerUp(PowerUp type, int charges, void Function({bool grantedByAd}) action) async {
     if (charges > 0) {
       action();
       return;
     }
     if (_adInFlight) return;
+    if (PowerUpInventory.instance.consume(type)) {
+      action(grantedByAd: true);
+      return;
+    }
     final wasPaused = _engine.paused;
     if (!wasPaused) _engine.togglePause();
     _adInFlight = true;
@@ -114,6 +147,7 @@ class _GameScreenState extends State<GameScreen> {
     if (_engine.board[row][col] == null) return;
     setState(() => _hammerArmed = false);
     _usePowerUp(
+      PowerUp.hammer,
       _engine.hammerCharges,
       ({bool grantedByAd = false}) => _engine.hammerDestroy(row, col, grantedByAd: grantedByAd),
     );
@@ -135,8 +169,28 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
+  Future<void> _doubleScore() async {
+    if (_adInFlight) return;
+    _adInFlight = true;
+    final earned = await AdsService.instance.showRewarded();
+    _adInFlight = false;
+    if (!mounted) return;
+    if (earned) {
+      _engine.doubleScore();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ad not available right now. Try again later.')),
+      );
+    }
+  }
+
+  int _total(PowerUp type, int charges) => charges + PowerUpInventory.instance.count(type);
+
   @override
   void dispose() {
+    _engine.persist();
+    WidgetsBinding.instance.removeObserver(this);
+    PowerUpInventory.instance.removeListener(_onInventoryChanged);
     _engine.removeListener(_onEngineChanged);
     _engine.dispose();
     _bannerAd?.dispose();
@@ -178,7 +232,7 @@ class _GameScreenState extends State<GameScreen> {
           elevation: 0,
           titleSpacing: 0,
           title: Text(
-            widget.mode == GameMode.survival ? 'Survival' : 'Classic',
+            widget.mode.label,
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
@@ -254,15 +308,15 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                     ),
                     PowerUpBar(
-                      undoCharges: _engine.undoCharges,
-                      hammerCharges: _engine.hammerCharges,
-                      shuffleCharges: _engine.shuffleCharges,
+                      undoCharges: _total(PowerUp.undo, _engine.undoCharges),
+                      hammerCharges: _total(PowerUp.hammer, _engine.hammerCharges),
+                      shuffleCharges: _total(PowerUp.shuffle, _engine.shuffleCharges),
                       canUndo: _engine.canUndo,
                       enabled: !_engine.paused && !_engine.gameOver,
                       hammerArmed: _hammerArmed,
-                      onUndo: () => _usePowerUp(_engine.undoCharges, _engine.undo),
+                      onUndo: () => _usePowerUp(PowerUp.undo, _engine.undoCharges, _engine.undo),
                       onHammer: _onHammerButton,
-                      onShuffle: () => _usePowerUp(_engine.shuffleCharges, _engine.shuffleTray),
+                      onShuffle: () => _usePowerUp(PowerUp.shuffle, _engine.shuffleCharges, _engine.shuffleTray),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -296,6 +350,7 @@ class _GameScreenState extends State<GameScreen> {
                     score: _engine.score,
                     best: _engine.best,
                     onContinue: _engine.canContinueAfterGameOver ? _continueAfterGameOver : null,
+                    onDouble: _engine.canDoubleScore ? _doubleScore : null,
                     onRestart: _restart,
                     onExit: _exitToMenu,
                   ),
@@ -437,6 +492,7 @@ class _GameOverOverlay extends StatelessWidget {
   final int score;
   final int best;
   final VoidCallback? onContinue;
+  final VoidCallback? onDouble;
   final VoidCallback onRestart;
   final VoidCallback onExit;
 
@@ -444,6 +500,7 @@ class _GameOverOverlay extends StatelessWidget {
     required this.score,
     required this.best,
     required this.onContinue,
+    required this.onDouble,
     required this.onRestart,
     required this.onExit,
   });
@@ -490,6 +547,18 @@ class _GameOverOverlay extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.play_circle_fill),
                 label: const Text('Continue (watch ad)'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (onDouble != null) ...[
+              ElevatedButton.icon(
+                onPressed: onDouble,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.ondemand_video),
+                label: const Text('x2 Score (watch ad)'),
               ),
               const SizedBox(height: 12),
             ],

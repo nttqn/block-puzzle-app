@@ -136,8 +136,11 @@ BlockShape _parseShape(List<String> grid) {
 
 final Random _rng = Random();
 
-PieceInstance randomPiece() {
-  final shape = kAllShapes[_rng.nextInt(kAllShapes.length)];
-  final color = kPieceColors[_rng.nextInt(kPieceColors.length)];
+/// Draws from [rng] when given (the daily challenge's date-seeded sequence),
+/// otherwise from a shared unseeded generator.
+PieceInstance randomPiece([Random? rng]) {
+  final r = rng ?? _rng;
+  final shape = kAllShapes[r.nextInt(kAllShapes.length)];
+  final color = kPieceColors[r.nextInt(kPieceColors.length)];
   return PieceInstance(cells: shape.cells, height: shape.height, width: shape.width, color: color);
 }

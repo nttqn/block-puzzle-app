@@ -10,6 +10,11 @@ enum GameMode {
   /// be completed (clearing it) before its countdown reaches zero, or the
   /// run ends immediately regardless of whether pieces could still fit.
   survival,
+
+  /// Classic rules, but the piece sequence is seeded by the date, so
+  /// everyone gets the same blocks that day. Tracks today's best and a
+  /// day streak (see `DailyService`) instead of an all-time best.
+  daily,
 }
 
 extension GameModeLabel on GameMode {
@@ -19,6 +24,8 @@ extension GameModeLabel on GameMode {
         return 'Classic';
       case GameMode.survival:
         return 'Survival';
+      case GameMode.daily:
+        return 'Daily';
     }
   }
 
@@ -28,6 +35,8 @@ extension GameModeLabel on GameMode {
         return 'Clear lines at your own pace.';
       case GameMode.survival:
         return 'Defuse the bomb before time runs out!';
+      case GameMode.daily:
+        return 'Same blocks for everyone today.';
     }
   }
 }

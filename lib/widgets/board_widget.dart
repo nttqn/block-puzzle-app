@@ -1,6 +1,7 @@
 import 'dart:math' show cos, pi, sin;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../game/game_engine.dart';
 import '../models/piece.dart';
@@ -42,12 +43,16 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
   int _lastComboBannerSeq = 0;
   final List<_ActiveComboBanner> _activeComboBanners = [];
 
+  int _lastNewBestSeq = 0;
+  AnimationController? _newBest;
+
   @override
   void initState() {
     super.initState();
     _lastPopupSeq = widget.engine.popupSeq;
     _lastExplosionSeq = widget.engine.explosionSeq;
     _lastComboBannerSeq = widget.engine.comboBannerSeq;
+    _lastNewBestSeq = widget.engine.newBestSeq;
   }
 
   @override
@@ -68,6 +73,26 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
       _lastComboBannerSeq = widget.engine.comboBannerSeq;
       _addComboBanner(comboMultiplier);
     }
+    if (widget.engine.newBestSeq != _lastNewBestSeq) {
+      _lastNewBestSeq = widget.engine.newBestSeq;
+      _playNewBest();
+    }
+  }
+
+  void _playNewBest() {
+    _newBest?.dispose();
+    final controller = AnimationController(duration: const Duration(milliseconds: 2200), vsync: this);
+    controller.addListener(() => setState(() {}));
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed && _newBest == controller) {
+        setState(() => _newBest = null);
+        controller.dispose();
+      }
+    });
+    _newBest = controller;
+    HapticFeedback.heavyImpact();
+    SoundService.instance.play(SoundEffect.confirm);
+    controller.forward();
   }
 
   void _addPopup(ScorePopup popup) {
@@ -123,6 +148,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
     for (final entry in _activeComboBanners) {
       entry.controller.dispose();
     }
+    _newBest?.dispose();
     super.dispose();
   }
 
@@ -220,6 +246,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                   for (final entry in _activeExplosions) ..._buildExplosion(entry, cellSize),
                   for (final entry in _activePopups) _buildPopup(entry, cellSize),
                   for (final entry in _activeComboBanners) _buildComboBanner(entry, cellSize),
+                  if (_newBest != null) ..._buildNewBest(_newBest!.value, cellSize),
                 ],
               ),
             );
@@ -315,6 +342,81 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
         ),
       ),
     );
+  }
+
+  static const int _confettiCount = 48;
+
+  /// Confetti falling across the whole board plus a "NEW BEST!" title,
+  /// the first time this game's score passes the best it started against.
+  /// Each piece's start column, drift, spin and color come from its index,
+  /// so the shower looks random but needs no per-piece state.
+  List<Widget> _buildNewBest(double t, double cellSize) {
+    final extent = cellSize * GameEngine.boardSize;
+    final pieceSize = cellSize * 0.38;
+    final fade = t < 0.8 ? 1.0 : (1 - (t - 0.8) / 0.2).clamp(0.0, 1.0);
+    final widgets = <Widget>[];
+    for (var i = 0; i < _confettiCount; i++) {
+      final startX = ((i * 37) % _confettiCount) / _confettiCount * extent;
+      final delay = (i % 8) / 8 * 0.3;
+      final p = ((t - delay) / (1 - delay)).clamp(0.0, 1.0);
+      if (p <= 0) continue;
+      final x = startX + sin(p * pi * 3 + i) * cellSize * 0.8;
+      final y = -pieceSize + p * (extent + pieceSize * 2);
+      widgets.add(
+        Positioned(
+          left: x,
+          top: y,
+          width: pieceSize,
+          height: pieceSize * 0.55,
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: fade,
+              child: Transform.rotate(
+                angle: p * pi * (4 + i % 3),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: kPieceColors[i % kPieceColors.length],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    final scale = t < 0.2 ? Curves.easeOutBack.transform(t / 0.2) : 1.0;
+    widgets.add(
+      Positioned(
+        left: 0,
+        right: 0,
+        top: extent * 0.12,
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: fade,
+            child: Transform.scale(
+              scale: scale,
+              child: Center(
+                child: Text(
+                  'NEW BEST!',
+                  style: TextStyle(
+                    color: Colors.amberAccent,
+                    fontSize: cellSize * 1.6,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                    shadows: const [
+                      Shadow(color: Colors.black, blurRadius: 10),
+                      Shadow(color: Colors.amber, blurRadius: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return widgets;
   }
 
   static const int _particlesPerCell = 6;
