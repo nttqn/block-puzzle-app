@@ -6,6 +6,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../debug/screenshot_scenarios.dart';
 import '../game/game_engine.dart';
 import '../game/game_mode.dart';
+import '../models/adventure.dart';
 import '../services/ads_service.dart';
 import '../services/leaderboard_service.dart';
 import '../services/music_service.dart';
@@ -25,7 +26,10 @@ class GameScreen extends StatefulWidget {
   /// (falls back to a fresh game if there turns out to be none).
   final bool resume;
 
-  const GameScreen({super.key, this.mode = GameMode.classic, this.resume = false});
+  /// [GameMode.adventure] only: the level to start on.
+  final int level;
+
+  const GameScreen({super.key, this.mode = GameMode.classic, this.resume = false, this.level = 1});
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -43,6 +47,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   // enough that whole rows become unreachable on wide/desktop windows.
   final ValueNotifier<double> _boardCellSize = ValueNotifier<double>(40);
 
+  late int _level = widget.level;
+
   @override
   void initState() {
     super.initState();
@@ -59,7 +65,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Future<void> _begin() async {
     if (widget.resume && await _engine.resume(widget.mode)) return;
-    await _engine.start(mode: widget.mode);
+    await _engine.start(mode: widget.mode, levelNumber: _level);
     final shot = screenshotScenario;
     if (shot != null && mounted) {
       _engine.persistEnabled = false;
@@ -92,7 +98,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     SoundService.instance.play(SoundEffect.confirm);
     _interstitialShown = false;
     _hammerArmed = false;
-    _engine.start(mode: widget.mode);
+    _engine.start(mode: widget.mode, levelNumber: _level);
+  }
+
+  void _nextLevel() {
+    setState(() => _level++);
+    _restart();
   }
 
   void _togglePauseWithSound() {
@@ -232,7 +243,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           elevation: 0,
           titleSpacing: 0,
           title: Text(
-            widget.mode.label,
+            widget.mode == GameMode.adventure ? 'Level $_level' : widget.mode.label,
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
@@ -271,7 +282,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             _BombTimerChip(
                               secondsLeft: _engine.bomb!.secondsLeft,
                             ),
-                          _ScoreTile(label: 'BEST', value: _engine.best, highlight: true),
+                          if (_engine.level != null)
+                            _GoalChip(level: _engine.level!, progress: _engine.goalProgress),
+                          if (_engine.level != null)
+                            _ScoreTile(label: 'MOVES', value: _engine.movesLeft, highlight: true)
+                          else
+                            _ScoreTile(label: 'BEST', value: _engine.best, highlight: true),
                         ],
                       ),
                     ),
@@ -345,8 +361,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     onRestart: _restart,
                     onExit: _exitToMenu,
                   ),
-                if (_engine.gameOver)
+                if (_engine.gameOver && _engine.won)
+                  _LevelCompleteOverlay(
+                    level: _level,
+                    stars: _engine.stars,
+                    score: _engine.score,
+                    onNext: _level < kAdventureLevels ? _nextLevel : null,
+                    onReplay: _restart,
+                    onExit: _exitToMenu,
+                  ),
+                if (_engine.gameOver && !_engine.won)
                   _GameOverOverlay(
+                    title: _engine.level == null
+                        ? 'GAME OVER'
+                        : (_engine.movesLeft <= 0 ? 'OUT OF MOVES' : 'NO ROOM LEFT'),
+                    showBest: _engine.level == null,
                     score: _engine.score,
                     best: _engine.best,
                     onContinue: _engine.canContinueAfterGameOver ? _continueAfterGameOver : null,
@@ -489,6 +518,8 @@ class _PauseOverlay extends StatelessWidget {
 }
 
 class _GameOverOverlay extends StatelessWidget {
+  final String title;
+  final bool showBest;
   final int score;
   final int best;
   final VoidCallback? onContinue;
@@ -497,6 +528,8 @@ class _GameOverOverlay extends StatelessWidget {
   final VoidCallback onExit;
 
   const _GameOverOverlay({
+    required this.title,
+    required this.showBest,
     required this.score,
     required this.best,
     required this.onContinue,
@@ -507,16 +540,16 @@ class _GameOverOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isNewBest = score >= best && score > 0;
+    final isNewBest = showBest && score >= best && score > 0;
     return Container(
       color: Colors.black.withValues(alpha: 0.8),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'GAME OVER',
-              style: TextStyle(
+            Text(
+              title,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
@@ -533,10 +566,11 @@ class _GameOverOverlay extends StatelessWidget {
               'Score: $score',
               style: const TextStyle(color: Colors.white, fontSize: 20),
             ),
-            Text(
-              'Best: $best',
-              style: const TextStyle(color: Colors.white54, fontSize: 16),
-            ),
+            if (showBest)
+              Text(
+                'Best: $best',
+                style: const TextStyle(color: Colors.white54, fontSize: 16),
+              ),
             const SizedBox(height: 24),
             if (onContinue != null) ...[
               ElevatedButton.icon(
@@ -569,8 +603,132 @@ class _GameOverOverlay extends StatelessWidget {
                 const SizedBox(width: 16),
                 ElevatedButton(
                   onPressed: onRestart,
-                  child: const Text('Play Again'),
+                  child: Text(showBest ? 'Play Again' : 'Retry'),
                 ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Adventure: the level's goal and how far along it is, e.g. "💎 2 / 5".
+class _GoalChip extends StatelessWidget {
+  final AdventureLevel level;
+  final int progress;
+
+  const _GoalChip({required this.level, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, unit) = switch (level.goal) {
+      LevelGoal.score => (Icons.star_rounded, 'pts'),
+      LevelGoal.lines => (Icons.view_stream_rounded, 'lines'),
+      LevelGoal.gems => (Icons.diamond, 'gems'),
+    };
+    final shown = progress.clamp(0, level.target);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.lightBlueAccent.withValues(alpha: 0.6), width: 1.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'GOAL',
+            style: TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: level.goal == LevelGoal.gems ? const Color(0xFFEA80FC) : Colors.amberAccent),
+              const SizedBox(width: 4),
+              Text(
+                '$shown / ${level.target} $unit',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LevelCompleteOverlay extends StatelessWidget {
+  final int level;
+  final int stars;
+  final int score;
+  final VoidCallback? onNext;
+  final VoidCallback onReplay;
+  final VoidCallback onExit;
+
+  const _LevelCompleteOverlay({
+    required this.level,
+    required this.stars,
+    required this.score,
+    required this.onNext,
+    required this.onReplay,
+    required this.onExit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.8),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'LEVEL $level COMPLETE!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 1; i <= 3; i++)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: i == 2 ? 14 : 0),
+                    child: Icon(
+                      Icons.star_rounded,
+                      size: i == 2 ? 72 : 56,
+                      color: i <= stars ? Colors.amber : Colors.white24,
+                      shadows: i <= stars ? const [Shadow(color: Colors.orange, blurRadius: 16)] : null,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Score: $score', style: const TextStyle(color: Colors.white, fontSize: 20)),
+            if (stars < 3)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('Finish with more moves left for more stars', style: TextStyle(color: Colors.white54)),
+              ),
+            const SizedBox(height: 24),
+            if (onNext != null) ...[
+              ElevatedButton.icon(
+                onPressed: onNext,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Next level'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OutlinedButton(onPressed: onExit, child: const Text('Menu')),
+                const SizedBox(width: 16),
+                OutlinedButton(onPressed: onReplay, child: const Text('Replay')),
               ],
             ),
           ],

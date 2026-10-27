@@ -814,6 +814,33 @@ calls the engine method with `grantedByAd: true` (does not bank a charge).
 - Store scene 07 is now `07-new-best` (best seeded via `?best=` in the init
   script); combo x3 moved to 10, replacing the old high-score scene.
 
+**Adventure, stats, skins (added v1.0.4+7)**:
+- **Adventure** (`GameMode.adventure`, `lib/models/adventure.dart`,
+  `lib/screens/level_select_screen.dart`): 60 levels generated from their
+  number by `adventureLevel(n)`. There is no level data file. Goals rotate
+  score → lines → gems, and each group of 3 levels is a difficulty tier. Gems are
+  `kGemColor` board cells, collected when their line clears or by the
+  Hammer. Pre-placed cells never put more than 9 in a row or column.
+  The engine tracks `level`/`movesLeft`/`linesThisGame`/`gemsLeft`/`won`; a
+  win also sets `gameOver` (`won` tells the endings apart). Stars come from
+  the share of moves left (≥30% → 3, ≥15% → 2). Continue = undo the fatal
+  move **plus 5 moves**; there's no x2 score, no leaderboard and no save/resume
+  in Adventure (`persist()` skips it). `AdventureService` stores the best
+  stars per level; a level unlocks once the one before it is beaten.
+- **Stats** (`StatsService`, `lib/screens/stats_screen.dart`, the home
+  AppBar's leading icon): updated from the engine only when `persistEnabled`
+  (so tests and screenshot scenes don't count). A continued run that ends
+  again still counts as one game (`_endCounted`).
+- **Skins** (`SkinService`, `BlockSkin`): Candy is the sprite art; Flat,
+  Neon and Crystal are drawn in code in `BlockCell`, so they need no
+  assets. Unlock rules are in `BlockSkinInfo.isUnlocked` (5 games, 200
+  lines, 30 Adventure stars), and they're checked live from the stats rather
+  than stored.
+- Screenshot scenes `adventure` / `advwin` / `levels` / `stats` (the
+  `HomeScreen` shot switch routes them). The store set is now: home,
+  classic, adventure, combo, new-best, hammer, survival (bomb), game-over |
+  level-complete, stats-skins (the last two are App Store only).
+
 **Sound (`lib/services/sound_service.dart`)**: `flame_audio` + `AudioPool`,
 same pattern as [[project_dino_egg_shooter]]/number99-app — `sound_src/`
 holds the source WAVs/MP3s, `assets/audio/` holds the bundled copies

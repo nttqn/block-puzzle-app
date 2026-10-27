@@ -4,12 +4,15 @@ import 'dart:math' show Random;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../models/adventure.dart';
 import '../models/piece.dart';
+import '../services/adventure_service.dart';
 import '../services/daily_service.dart';
 import '../services/game_save_service.dart';
 import '../services/leaderboard_service.dart';
 import '../services/score_service.dart';
 import '../services/sound_service.dart';
+import '../services/stats_service.dart';
 import 'game_mode.dart';
 
 /// The board color a bomb tile is drawn with. Occupies its cell like any
@@ -17,6 +20,10 @@ import 'game_mode.dart';
 /// a row/column counts it as "filled" toward completing a line) but is
 /// rendered distinctly by the UI and carries its own countdown.
 const Color kBombColor = Color(0xFF14181D);
+
+/// The board color of an Adventure gem tile: a filled cell like any other,
+/// collected when its row or column clears (or by the Hammer).
+const Color kGemColor = Color(0xFF9C27B0);
 
 /// Core Block Puzzle game state: a board, a 3-slot tray of pieces to place,
 /// score/combo tracking, game-over detection, and (in [GameMode.survival])
@@ -101,13 +108,46 @@ class GameEngine extends ChangeNotifier {
   bool _newBestCelebrated = false;
   int newBestSeq = 0;
 
-  /// Engines made by tests shouldn't write a save file; only a real
-  /// [start]/[resume] turns this on. Screenshot scenes turn it back off.
+  /// Engines made by tests shouldn't write a save file or touch lifetime
+  /// stats; only a real [start]/[resume] turns this on. Screenshot scenes
+  /// turn it back off.
   bool persistEnabled = false;
 
-  Future<void> start({GameMode mode = GameMode.classic}) async {
+  /// [GameMode.adventure] only: the level being played and its progress.
+  /// A win also sets [gameOver] (the run is over either way); [won] tells
+  /// the two endings apart.
+  AdventureLevel? level;
+  int movesLeft = 0;
+  int linesThisGame = 0;
+  int gemsLeft = 0;
+  bool won = false;
+  bool _endCounted = false;
+
+  /// How far along the level goal is, in the goal's own unit.
+  int get goalProgress => switch (level?.goal) {
+        LevelGoal.score => score,
+        LevelGoal.lines => linesThisGame,
+        LevelGoal.gems => level!.target - gemsLeft,
+        null => 0,
+      };
+
+  bool get _goalMet => level != null && goalProgress >= level!.target;
+
+  /// Stars earned for a won level (0 otherwise).
+  int get stars => won && level != null ? level!.starsFor(movesLeft) : 0;
+
+  Future<void> start({GameMode mode = GameMode.classic, int levelNumber = 1}) async {
     this.mode = mode;
-    if (mode == GameMode.daily) {
+    level = null;
+    won = false;
+    _endCounted = false;
+    linesThisGame = 0;
+    if (mode == GameMode.adventure) {
+      level = adventureLevel(levelNumber, boardSize: boardSize);
+      dailyDate = null;
+      _pieceRng = Random(level!.pieceSeed);
+      best = 0;
+    } else if (mode == GameMode.daily) {
       dailyDate = todayKey();
       _pieceRng = Random(int.parse(dailyDate!));
       best = await DailyService.instance.bestFor(dailyDate!);
@@ -127,6 +167,17 @@ class GameEngine extends ChangeNotifier {
     paused = false;
     clearingCells = {};
     bomb = null;
+    final lvl = level;
+    if (lvl != null) {
+      for (final (r, c, color) in lvl.clutter) {
+        board[r][c] = kPieceColors[color];
+      }
+      for (final (r, c) in lvl.gems) {
+        board[r][c] = kGemColor;
+      }
+      movesLeft = lvl.moves;
+      gemsLeft = lvl.gems.length;
+    }
     tray = List<PieceInstance?>.filled(trayCount, null);
     _refillTray();
     undoCharges = 1;
@@ -258,7 +309,7 @@ class GameEngine extends ChangeNotifier {
   /// Writes the current game to disk (called after every move/power-up and
   /// when the app is backgrounded). A finished game is never saved.
   void persist() {
-    if (!persistEnabled || gameOver) return;
+    if (!persistEnabled || gameOver || level != null) return;
     unawaited(GameSaveService.instance.save(mode, toSave()));
   }
 
@@ -368,6 +419,7 @@ class GameEngine extends ChangeNotifier {
       if (bomb != null && (fullRows.contains(bomb!.row) || fullCols.contains(bomb!.col))) {
         bomb = null;
       }
+      gemsLeft -= flashed.where((p) => board[p.x][p.y] == kGemColor).length;
 
       // Capture each cell's color before it's nulled below, for the
       // explosion particle effect — the board itself no longer has this
@@ -397,6 +449,7 @@ class GameEngine extends ChangeNotifier {
 
       combo++;
       final totalLines = fullRows.length + fullCols.length;
+      linesThisGame += totalLines;
       // Clearing 2+ lines in one placement earns a flat xN multiplier
       // (N = lines cleared) on top of the per-line points, on top of (not
       // instead of) comboMultiplier below — that one instead rewards
@@ -437,8 +490,24 @@ class GameEngine extends ChangeNotifier {
       _newBestCelebrated = true;
       newBestSeq++;
     }
+    if (persistEnabled) {
+      StatsService.instance.onPlacement(
+        blocks: piece.cells.length,
+        lines: fullRows.length + fullCols.length,
+        streak: combo,
+      );
+    }
 
-    _checkGameOver();
+    if (level != null) {
+      movesLeft--;
+      if (_goalMet) {
+        won = true;
+        gameOver = true;
+      } else if (movesLeft <= 0) {
+        gameOver = true;
+      }
+    }
+    if (!gameOver) _checkGameOver();
     if (gameOver) _onGameEnded();
     persist();
     notifyListeners();
@@ -456,7 +525,7 @@ class GameEngine extends ChangeNotifier {
   /// already been used.
   bool get canUndo => _lastSnapshot != null && clearingCells.isEmpty;
 
-  bool get canContinueAfterGameOver => gameOver && _lastSnapshot != null && !_usedContinue;
+  bool get canContinueAfterGameOver => gameOver && !won && _lastSnapshot != null && !_usedContinue;
 
   /// Reverts the board/tray/score/combo/bomb to how they were immediately
   /// before the most recent [placePiece] call, and clears [gameOver] if that
@@ -485,6 +554,9 @@ class GameEngine extends ChangeNotifier {
     if (!canContinueAfterGameOver) return;
     _usedContinue = true;
     undo(grantedByAd: true);
+    // Adventure: undoing one move rarely saves a level that ran out of
+    // moves, so the continue also hands out 5 extra.
+    if (level != null) movesLeft += 5;
     if (mode == GameMode.survival) {
       _bombTimer?.cancel();
       _bombTimer = Timer.periodic(const Duration(seconds: 1), _tickBomb);
@@ -501,15 +573,20 @@ class GameEngine extends ChangeNotifier {
       if (hammerCharges <= 0) return;
       hammerCharges--;
     }
+    if (board[row][col] == kGemColor) gemsLeft--;
     board[row][col] = null;
     if (bomb != null && bomb!.row == row && bomb!.col == col) {
       bomb = null;
+    }
+    if (_goalMet) {
+      won = true;
+      gameOver = true;
     }
     // Undo only reverts placements; letting it also silently roll back a
     // power-up the player just spent would waste that power-up.
     _lastSnapshot = null;
     SoundService.instance.play(SoundEffect.clear);
-    _checkGameOver();
+    if (!gameOver) _checkGameOver();
     if (gameOver) _onGameEnded();
     persist();
     notifyListeners();
@@ -534,7 +611,7 @@ class GameEngine extends ChangeNotifier {
 
   /// Game Over's "x2 score (watch ad)": doubles the final score once. It
   /// cashes the run out, so the one-time continue is gone afterwards.
-  bool get canDoubleScore => gameOver && !_doubled && score > 0;
+  bool get canDoubleScore => gameOver && level == null && !_doubled && score > 0;
 
   void doubleScore() {
     if (!canDoubleScore) return;
@@ -548,12 +625,21 @@ class GameEngine extends ChangeNotifier {
   }
 
   void _onGameEnded() {
-    SoundService.instance.play(SoundEffect.gameOver);
+    SoundService.instance.play(won ? SoundEffect.confirm : SoundEffect.gameOver);
+    // A continued run that ends again is still one game.
+    if (persistEnabled && !_endCounted) {
+      _endCounted = true;
+      StatsService.instance.onGameEnded(score);
+    }
     _recordResult();
     if (persistEnabled) unawaited(GameSaveService.instance.clear(mode));
   }
 
   void _recordResult() {
+    if (level != null) {
+      if (won) unawaited(AdventureService.instance.record(level!.number, stars));
+      return;
+    }
     if (mode == GameMode.daily) {
       if (dailyDate != null) unawaited(DailyService.instance.record(dailyDate!, score));
       return;
@@ -645,8 +731,21 @@ class _Snapshot {
   final int best;
   final int combo;
   final BombTile? bomb;
+  final int movesLeft;
+  final int linesThisGame;
+  final int gemsLeft;
 
-  _Snapshot._(this.board, this.tray, this.score, this.best, this.combo, this.bomb);
+  _Snapshot._(
+    this.board,
+    this.tray,
+    this.score,
+    this.best,
+    this.combo,
+    this.bomb,
+    this.movesLeft,
+    this.linesThisGame,
+    this.gemsLeft,
+  );
 
   factory _Snapshot.capture(GameEngine e) => _Snapshot._(
         [for (final row in e.board) List<Color?>.of(row)],
@@ -655,6 +754,9 @@ class _Snapshot {
         e.best,
         e.combo,
         e.bomb == null ? null : BombTile(row: e.bomb!.row, col: e.bomb!.col, secondsLeft: e.bomb!.secondsLeft),
+        e.movesLeft,
+        e.linesThisGame,
+        e.gemsLeft,
       );
 
   void restore(GameEngine e) {
@@ -664,6 +766,10 @@ class _Snapshot {
     e.best = best;
     e.combo = combo;
     e.bomb = bomb == null ? null : BombTile(row: bomb!.row, col: bomb!.col, secondsLeft: bomb!.secondsLeft);
+    e.movesLeft = movesLeft;
+    e.linesThisGame = linesThisGame;
+    e.gemsLeft = gemsLeft;
     e.gameOver = false;
+    e.won = false;
   }
 }

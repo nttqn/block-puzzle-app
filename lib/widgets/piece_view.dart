@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/piece.dart';
+import '../services/skin_service.dart';
 
 /// Renders a [PieceInstance] as its own little grid of block cells, sized
 /// by [cellSize]. Used both for the tray display and as a Draggable's
@@ -37,21 +38,67 @@ class PieceView extends StatelessWidget {
   }
 }
 
-/// A single glossy block cube — the shared visual unit for both placed
-/// board cells and piece previews.
+/// A single block cube — the shared visual unit for both placed board cells
+/// and piece previews, drawn in the selected [BlockSkin] (or [skin] when
+/// given, as the skin picker's previews do).
 class BlockCell extends StatelessWidget {
   final Color color;
   final double inset;
   final bool bright;
+  final BlockSkin? skin;
 
-  const BlockCell({super.key, required this.color, this.inset = 2, this.bright = false});
+  const BlockCell({super.key, required this.color, this.inset = 2, this.bright = false, this.skin});
 
   @override
   Widget build(BuildContext context) {
     final assetPath = kBlockAssetForColor[color];
-    return Padding(
-      padding: EdgeInsets.all(inset),
-      child: assetPath != null ? _buildArt(assetPath) : _buildGradient(),
+    final Widget child = switch (skin ?? SkinService.instance.skin.value) {
+      BlockSkin.candy => assetPath != null ? _buildArt(assetPath) : _buildGradient(),
+      BlockSkin.flat => _buildFlat(),
+      BlockSkin.neon => _buildNeon(),
+      BlockSkin.crystal => _buildCrystal(),
+    };
+    return Padding(padding: EdgeInsets.all(inset), child: child);
+  }
+
+  Color get _base => bright ? Color.lerp(color, Colors.white, 0.55)! : color;
+
+  Widget _buildFlat() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _base,
+        borderRadius: BorderRadius.circular(5),
+        border: Border(bottom: BorderSide(color: Color.lerp(_base, Colors.black, 0.3)!, width: 3)),
+      ),
+    );
+  }
+
+  Widget _buildNeon() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color.lerp(_base, Colors.black, bright ? 0.2 : 0.75),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Color.lerp(_base, Colors.white, 0.25)!, width: 2),
+        boxShadow: [BoxShadow(color: _base.withValues(alpha: 0.7), blurRadius: 6)],
+      ),
+    );
+  }
+
+  /// A faceted gem look: hard color stops make a diagonal "cut" line.
+  Widget _buildCrystal() {
+    final light = Color.lerp(_base, Colors.white, 0.55)!;
+    final dark = Color.lerp(_base, Colors.black, 0.3)!;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: light.withValues(alpha: 0.8), width: 1),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [light, _base, _base, dark, _base],
+          stops: const [0, 0.42, 0.5, 0.5, 1],
+        ),
+      ),
     );
   }
 
@@ -86,6 +133,32 @@ class BlockCell extends StatelessWidget {
           BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 2, offset: const Offset(0, 1)),
         ],
       ),
+    );
+  }
+}
+
+/// An Adventure gem tile: a sparkling diamond on a dark violet tile,
+/// distinct from every block color and skin.
+class GemCell extends StatelessWidget {
+  final bool bright;
+
+  const GemCell({super.key, this.bright = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest.shortestSide;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: bright ? Colors.white : const Color(0xFF2A1240),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFFE040FB), width: size * 0.05),
+            boxShadow: [BoxShadow(color: const Color(0xFFE040FB).withValues(alpha: 0.5), blurRadius: size * 0.2)],
+          ),
+          child: Icon(Icons.diamond, color: const Color(0xFFEA80FC), size: size * 0.66),
+        );
+      },
     );
   }
 }

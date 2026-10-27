@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../debug/screenshot_scenarios.dart';
 import '../game/game_mode.dart';
+import '../models/adventure.dart';
+import '../services/adventure_service.dart';
 import '../services/ads_service.dart';
 import '../services/daily_service.dart';
 import '../services/game_save_service.dart';
@@ -14,6 +16,8 @@ import '../widgets/app_background.dart';
 import '../widgets/music_toggle_button.dart';
 import '../widgets/sound_toggle_button.dart';
 import 'game_screen.dart';
+import 'level_select_screen.dart';
+import 'stats_screen.dart';
 
 const Map<PowerUp, IconData> _powerUpIcons = {
   PowerUp.undo: Icons.undo,
@@ -43,12 +47,29 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadBests();
     PowerUpInventory.instance.addListener(_onInventoryChanged);
+    AdventureService.instance.addListener(_onInventoryChanged);
     MusicService.instance.playMenu();
     final shot = screenshotScenario;
     if (shot != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        shot == 'howto' ? _showHowToPlay(context) : _play(scenarioMode(shot));
+        switch (shot) {
+          case 'howto':
+            _showHowToPlay(context);
+          case 'levels':
+            _play(GameMode.adventure);
+          case 'stats':
+            _openStats();
+          default:
+            final mode = scenarioMode(shot);
+            if (mode == GameMode.adventure) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => GameScreen(mode: mode, level: scenarioLevel(shot))),
+              );
+            } else {
+              _play(mode);
+            }
+        }
       });
     }
   }
@@ -56,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     PowerUpInventory.instance.removeListener(_onInventoryChanged);
+    AdventureService.instance.removeListener(_onInventoryChanged);
     super.dispose();
   }
 
@@ -93,7 +115,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openStats() async {
+    SoundService.instance.play(SoundEffect.confirm);
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StatsScreen()));
+    if (mounted) setState(() {});
+  }
+
   Future<void> _play(GameMode mode) async {
+    if (mode == GameMode.adventure) {
+      SoundService.instance.play(SoundEffect.confirm);
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LevelSelectScreen()));
+      if (mounted) setState(() {});
+      return;
+    }
     var resume = false;
     final saved = _savedScore[mode];
     if (saved != null) {
@@ -178,6 +212,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String _subtitle(GameMode mode) {
     final saved = _savedScore[mode];
     if (saved != null) return 'Saved game · $saved';
+    if (mode == GameMode.adventure) {
+      final adv = AdventureService.instance;
+      return 'Level ${adv.unlocked} · ★ ${adv.totalStars} / ${kAdventureLevels * 3}';
+    }
     if (mode == GameMode.daily) {
       final streak = _daily.streak > 0 ? '🔥 ${_daily.streak} day${_daily.streak == 1 ? '' : 's'}' : 'New every day';
       return _daily.playedToday ? '$streak · Today: ${_daily.todayBest}' : streak;
@@ -193,6 +231,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          onPressed: _openStats,
+          icon: const Icon(Icons.bar_chart_rounded),
+          tooltip: 'Stats & Skins',
+        ),
         actions: const [MusicToggleButton(), SoundToggleButton()],
       ),
       body: AppBackground(
@@ -202,8 +245,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset('assets/title/title.png', width: 220),
-                  const SizedBox(height: 32),
+                  Image.asset('assets/title/title.png', width: 200),
+                  const SizedBox(height: 24),
                   for (final mode in GameMode.values) ...[
                     // Fixed total width (matches the old solo _ModeButton's own
                     // width) with the leaderboard button carved out of it via
@@ -225,9 +268,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () => _play(mode),
                             ),
                           ),
-                          // Daily scores have no leaderboard (everyone's
-                          // board differs after the first move anyway).
-                          if (mode == GameMode.daily)
+                          // Daily and Adventure have no leaderboard (Daily
+                          // boards diverge after the first move; Adventure
+                          // is scored in stars).
+                          if (mode == GameMode.daily || mode == GameMode.adventure)
                             const SizedBox(width: 22)
                           else
                             IconButton(
@@ -240,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                   ],
                   _GiftPanel(onClaim: _claimGift, onAdBonus: _claimAdBonus),
                   const SizedBox(height: 4),
@@ -269,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
             'Clear multiple lines at once, or clear lines back-to-back, for bonus combo points.\n\n'
             'Power-ups: Undo your last move, smash one block with the Hammer, or Shuffle your 3 blocks. One free use each per game, plus any saved from the daily gift, more by watching a short video.\n\n'
             'Classic: the game ends when none of your 3 blocks fit on the board.\n\n'
+            'Adventure: beat each level\'s goal (points, lines or gems) before you run out of moves. More moves left = more stars.\n\n'
             'Survival: a bomb tile is always ticking down somewhere on the board — clear its row or column before time runs out, or it\'s game over.\n\n'
             'Daily: everyone gets the same blocks today. Play every day to grow your streak.\n\n'
             'Your game is saved automatically, so you can close the app and resume later.',
@@ -365,6 +410,7 @@ class _ModeButton extends StatelessWidget {
           Icon(
             switch (mode) {
               GameMode.classic => Icons.play_arrow,
+              GameMode.adventure => Icons.map_rounded,
               GameMode.survival => Icons.local_fire_department,
               GameMode.daily => Icons.calendar_today,
             },

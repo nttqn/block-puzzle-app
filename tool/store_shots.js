@@ -55,18 +55,19 @@ function hammerY(png, dsf, boardBottom) {
 
 // Preset scenes come from lib/debug/screenshot_scenarios.dart (?shot=...).
 // drag: [traySlot, row, col] — row/col of the piece's center cell.
+// The first 8 are Play's set, so the headline features come first.
 const SCENES = [
   { file: '01-home', shot: '' },
   { file: '02-classic', shot: 'classic' },
-  { file: '03-combo', shot: 'combo', drag: [1, 10.5, 4], after: 380 },
-  { file: '04-hammer', shot: 'hammer', hammer: true },
-  { file: '05-survival', shot: 'survival' },
-  { file: '06-game-over', shot: 'gameover', drag: [0, 6, 6], after: 900 },
+  { file: '03-adventure', shot: 'adventure' },
+  { file: '04-combo', shot: 'combo', drag: [1, 10.5, 4], after: 380 },
   // Best seeded just under the scene's score so the drag beats it mid-run.
-  { file: '07-new-best', shot: 'combo', best: 990, drag: [1, 10.5, 4], after: 1300 },
-  { file: '08-bomb-countdown', shot: 'urgent' },
-  { file: '09-how-to-play', shot: 'howto' },
-  { file: '10-combo-x3', shot: 'combo3', drag: [0, 10, 7], after: 380 },
+  { file: '05-new-best', shot: 'combo', best: 990, drag: [1, 10.5, 4], after: 1300 },
+  { file: '06-hammer', shot: 'hammer', hammer: true },
+  { file: '07-survival', shot: 'urgent' },
+  { file: '08-game-over', shot: 'gameover', drag: [0, 6, 6], after: 900 },
+  { file: '09-level-complete', shot: 'advwin', drag: [0, 11, 1], after: 900 },
+  { file: '10-stats-skins', shot: 'stats' },
 ];
 
 async function shoot(browser, { dir, w: W, h: H, dsf, max }) {
@@ -79,6 +80,12 @@ async function shoot(browser, { dir, w: W, h: H, dsf, max }) {
     const best = location.search.match(/best=(\d+)/);
     localStorage.setItem('flutter.best_score_classic', best ? best[1] : '2860');
     localStorage.setItem('flutter.best_score_survival', '1450');
+    // A player some way in: 11 Adventure levels beaten, lifetime stats that
+    // unlock Flat and Neon (Crystal stays locked to show an unlock hint).
+    const stars = ['3', '3', '2', '3', '3', '2', '3', '1', '3', '2', '3'];
+    localStorage.setItem('flutter.adventure_stars', JSON.stringify(stars));
+    const stats = { games: 46, lines: 612, blocks: 4920, totalScore: 52440, bestStreak: 9, biggestClear: 4 };
+    for (const [k, v] of Object.entries(stats)) localStorage.setItem(`flutter.stat_${k}`, String(v));
   });
   const page = await context.newPage();
   const load = async (shot, best) => {

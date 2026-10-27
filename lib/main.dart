@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
+import 'services/adventure_service.dart';
 import 'services/ads_service.dart';
 import 'services/music_service.dart';
 import 'services/power_up_inventory.dart';
+import 'services/skin_service.dart';
 import 'services/sound_service.dart';
+import 'services/stats_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +20,9 @@ Future<void> main() async {
   unawaited(SoundService.instance.init());
   unawaited(MusicService.instance.init());
   unawaited(PowerUpInventory.instance.load());
+  unawaited(StatsService.instance.load());
+  unawaited(AdventureService.instance.load());
+  unawaited(SkinService.instance.load());
   runApp(const BlockPuzzleApp());
 }
 

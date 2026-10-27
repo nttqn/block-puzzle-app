@@ -6,6 +6,10 @@ enum GameMode {
   /// pressure beyond running out of room for the tray's pieces.
   classic,
 
+  /// Numbered levels, each with a goal (points, lines or gems) to reach
+  /// within a move limit, scored 1-3 stars. See lib/models/adventure.dart.
+  adventure,
+
   /// A bomb tile appears on the board at all times; its row or column must
   /// be completed (clearing it) before its countdown reaches zero, or the
   /// run ends immediately regardless of whether pieces could still fit.
@@ -22,6 +26,8 @@ extension GameModeLabel on GameMode {
     switch (this) {
       case GameMode.classic:
         return 'Classic';
+      case GameMode.adventure:
+        return 'Adventure';
       case GameMode.survival:
         return 'Survival';
       case GameMode.daily:
@@ -33,6 +39,8 @@ extension GameModeLabel on GameMode {
     switch (this) {
       case GameMode.classic:
         return 'Clear lines at your own pace.';
+      case GameMode.adventure:
+        return 'Beat level goals within a move limit.';
       case GameMode.survival:
         return 'Defuse the bomb before time runs out!';
       case GameMode.daily:

@@ -235,9 +235,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
                             padding: EdgeInsets.all(cellSize * 0.06),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: (_previewValid ? Colors.greenAccent : Colors.redAccent).withValues(
-                                  alpha: 0.55,
-                                ),
+                                color: (_previewValid ? Colors.greenAccent : Colors.redAccent).withValues(alpha: 0.55),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
@@ -310,9 +308,7 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
   Widget _buildComboBanner(_ActiveComboBanner entry, double cellSize) {
     final t = entry.controller.value;
     final scale = t < 0.35 ? Curves.easeOutBack.transform((t / 0.35).clamp(0.0, 1.0)) : 1.0;
-    final opacity = t < 0.7
-        ? 1.0
-        : (1.0 - Curves.easeIn.transform(((t - 0.7) / 0.3).clamp(0.0, 1.0))).clamp(0.0, 1.0);
+    final opacity = t < 0.7 ? 1.0 : (1.0 - Curves.easeIn.transform(((t - 0.7) / 0.3).clamp(0.0, 1.0))).clamp(0.0, 1.0);
     return Positioned(
       left: 0,
       right: 0,
@@ -477,21 +473,20 @@ class _BoardWidgetState extends State<BoardWidget> with TickerProviderStateMixin
       padding: const EdgeInsets.all(1),
       child: isBomb
           ? BombCell(secondsLeft: bomb.secondsLeft)
+          : color == kGemColor
+          ? GemCell(bright: isClearing)
           : color == null
-              ? DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF232E3D),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                )
-              : AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  // inset: 0 here, not the usual small gap — the outer
-                  // Padding(1) above already separates this cell from its
-                  // neighbors, so adding another inset on top of that
-                  // doubled the visible gap between adjacent placed blocks.
-                  child: BlockCell(color: color, inset: 0, bright: isClearing),
-                ),
+          ? DecoratedBox(
+              decoration: BoxDecoration(color: const Color(0xFF232E3D), borderRadius: BorderRadius.circular(3)),
+            )
+          : AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              // inset: 0 here, not the usual small gap — the outer
+              // Padding(1) above already separates this cell from its
+              // neighbors, so adding another inset on top of that
+              // doubled the visible gap between adjacent placed blocks.
+              child: BlockCell(color: color, inset: 0, bright: isClearing),
+            ),
     );
   }
 }
